@@ -1,18 +1,26 @@
 <?php
+$rolePermissions = $data['role_permissions'];
 $canManageSecurity = is_initial_admin();
+$currentRole = current_user()['role'];
+$canManageStores = (bool) ($rolePermissions[$currentRole]['STORE_MANAGE'] ?? false);
+$canManageProcessors = (bool) ($rolePermissions[$currentRole]['PROCESSOR_MANAGE'] ?? false);
 $availableTabs = ['password' => 'Schimba parola'];
 if ($canManageSecurity) {
     $availableTabs['roles'] = 'Roluri si drepturi';
     $availableTabs['users'] = 'Creare useri';
 }
-$availableTabs['stores'] = 'Gestiuni';
+if ($canManageStores) {
+    $availableTabs['stores'] = 'Gestiuni';
+}
+if ($canManageProcessors) {
+    $availableTabs['processors'] = 'Procesatori';
+}
 
 $activeTab = $_GET['settings_tab'] ?? 'password';
 if (!isset($availableTabs[$activeTab])) {
     $activeTab = 'password';
 }
 
-$rolePermissions = $data['role_permissions'];
 $storeNamesById = [];
 foreach ($data['stores'] as $store) {
     $storeNamesById[(int) $store['id']] = $store['name'];
@@ -39,10 +47,6 @@ foreach ($data['stores'] as $store) {
         <h2>Schimba parola</h2>
         <form method="post" class="form-grid">
             <input type="hidden" name="action" value="change_password">
-            <label>
-                Parola curenta
-                <input type="password" name="current_password" autocomplete="current-password" required>
-            </label>
             <label>
                 Parola noua
                 <input type="password" name="new_password" autocomplete="new-password" required>
@@ -179,7 +183,7 @@ foreach ($data['stores'] as $store) {
     </section>
 <?php endif; ?>
 
-<?php if ($activeTab === 'stores'): ?>
+<?php if ($activeTab === 'stores' && $canManageStores): ?>
     <section class="panel">
         <h2>Adauga gestiune</h2>
         <form method="post" class="form-grid">
@@ -202,6 +206,42 @@ foreach ($data['stores'] as $store) {
                     <label>Cod <input name="store_code" value="<?= h($store['code']) ?>" required></label>
                     <label>Denumire <input name="store_name" value="<?= h($store['name']) ?>" required></label>
                     <label>Adresa <input name="store_address" value="<?= h($store['address']) ?>"></label>
+                    <button class="small" type="submit">Salveaza</button>
+                </form>
+            <?php endforeach; ?>
+        </div>
+    </section>
+<?php endif; ?>
+
+<?php if ($activeTab === 'processors' && $canManageProcessors): ?>
+    <section class="panel">
+        <h2>Adauga procesator PJ</h2>
+        <form method="post" class="form-grid">
+            <input type="hidden" name="action" value="save_processor">
+            <input type="hidden" name="processor_id" value="0">
+            <label>Nume <input name="processor_name" required placeholder="Procesator SRL"></label>
+            <label>CUI <input name="processor_cui" required placeholder="RO123456"></label>
+            <label class="wide">Adresa <input name="processor_address" required></label>
+            <label>Pret procesare <input name="processing_price" inputmode="decimal" value="0"></label>
+            <label>Scazamant % <input name="exchange_shrinkage_pct" inputmode="decimal" value="0"></label>
+            <input type="hidden" name="purchase_shrinkage_pct" value="0">
+            <button class="primary" type="submit">Adauga procesator</button>
+        </form>
+    </section>
+
+    <section class="panel">
+        <h2>Lista procesatori</h2>
+        <div class="store-list">
+            <?php foreach ($data['processors'] as $processor): ?>
+                <form method="post" class="processor-row">
+                    <input type="hidden" name="action" value="save_processor">
+                    <input type="hidden" name="processor_id" value="<?= h((string) $processor['id']) ?>">
+                    <label>Nume <input name="processor_name" value="<?= h($processor['name']) ?>" required></label>
+                    <label>CUI <input name="processor_cui" value="<?= h($processor['cui']) ?>" required></label>
+                    <label>Adresa <input name="processor_address" value="<?= h($processor['address'] ?? '') ?>" required></label>
+                    <label>Pret procesare <input name="processing_price" inputmode="decimal" value="<?= h((string) ($processor['processing_price_cents'] / 100)) ?>"></label>
+                    <label>Scazamant % <input name="exchange_shrinkage_pct" inputmode="decimal" value="<?= h((string) $processor['exchange_shrinkage_pct']) ?>"></label>
+                    <input type="hidden" name="purchase_shrinkage_pct" value="<?= h((string) $processor['purchase_shrinkage_pct']) ?>">
                     <button class="small" type="submit">Salveaza</button>
                 </form>
             <?php endforeach; ?>

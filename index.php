@@ -89,7 +89,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($action === 'change_password') {
             $app->changeOwnPassword(
                 $user['id'],
-                post_string('current_password'),
                 post_string('new_password'),
                 post_string('confirm_password')
             );
@@ -123,6 +122,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($action === 'save_store') {
+            if (!$app->roleHasPermission($user['role'], 'STORE_MANAGE')) {
+                throw new RuntimeException('Nu ai dreptul sa administrezi gestiuni.');
+            }
             $app->saveStore([
                 'id' => post_int('store_id'),
                 'code' => post_string('store_code'),
@@ -131,6 +133,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ], $user['id']);
             flash('Gestiunea a fost salvata.');
             redirect('settings', ['settings_tab' => 'stores']);
+        }
+
+        if ($action === 'save_processor') {
+            if (!$app->roleHasPermission($user['role'], 'PROCESSOR_MANAGE')) {
+                throw new RuntimeException('Nu ai dreptul sa administrezi procesatori.');
+            }
+            $app->saveProcessor([
+                'id' => post_int('processor_id'),
+                'name' => post_string('processor_name'),
+                'cui' => post_string('processor_cui'),
+                'address' => post_string('processor_address'),
+                'processing_price' => post_string('processing_price'),
+                'exchange_shrinkage_pct' => post_string('exchange_shrinkage_pct'),
+                'purchase_shrinkage_pct' => post_string('purchase_shrinkage_pct'),
+            ], $user['id']);
+            flash('Procesatorul a fost salvat.');
+            redirect('settings', ['settings_tab' => 'processors']);
         }
 
         if ($action === 'save_settings') {

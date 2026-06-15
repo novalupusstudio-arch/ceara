@@ -65,7 +65,16 @@ final class Database
             $pdo->exec($statement);
         }
 
+        $this->migrateExistingTables($pdo);
         $this->seed($pdo);
+    }
+
+    private function migrateExistingTables(PDO $pdo): void
+    {
+        $column = $pdo->query("SHOW COLUMNS FROM processors LIKE 'address'")->fetch();
+        if (!$column) {
+            $pdo->exec("ALTER TABLE processors ADD address VARCHAR(255) NOT NULL DEFAULT '' AFTER cui");
+        }
     }
 
     private function seed(PDO $pdo): void
@@ -94,8 +103,8 @@ final class Database
         $processorCount = (int) $pdo->query('SELECT COUNT(*) FROM processors')->fetchColumn();
         if ($processorCount === 0) {
             $pdo->prepare(
-                'INSERT INTO processors (name, cui, contact, processing_price_cents, exchange_shrinkage_pct, purchase_shrinkage_pct) VALUES (?, ?, ?, ?, ?, ?)'
-            )->execute(['Procesator implicit', '', '', 0, 0, 0]);
+                'INSERT INTO processors (name, cui, address, contact, processing_price_cents, exchange_shrinkage_pct, purchase_shrinkage_pct) VALUES (?, ?, ?, ?, ?, ?, ?)'
+            )->execute(['Procesator implicit', '', '', '', 0, 0, 0]);
         }
 
         $permissions = [

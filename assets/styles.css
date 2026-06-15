@@ -436,13 +436,18 @@ th {
   gap: 12px;
 }
 
-.store-row {
+.store-row,
+.processor-row {
   display: grid;
   grid-template-columns: 120px minmax(160px, 1fr) minmax(220px, 1.4fr) auto;
   gap: 12px;
   align-items: end;
   border-bottom: 1px solid var(--line);
   padding-bottom: 12px;
+}
+
+.processor-row {
+  grid-template-columns: minmax(160px, 1.1fr) 130px minmax(220px, 1.4fr) 130px 120px auto;
 }
 
 .app-footer {
@@ -523,7 +528,8 @@ th {
   .two-column,
   .form-grid,
   .login-shell,
-  .store-row {
+  .store-row,
+  .processor-row {
     grid-template-columns: 1fr;
   }
 

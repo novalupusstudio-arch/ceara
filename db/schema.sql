@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS processors (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(160) NOT NULL,
     cui VARCHAR(40) NOT NULL DEFAULT '',
+    address VARCHAR(255) NOT NULL DEFAULT '',
     contact VARCHAR(160) NOT NULL DEFAULT '',
     processing_price_cents INT NOT NULL DEFAULT 0,
     exchange_shrinkage_pct DECIMAL(6,3) NOT NULL DEFAULT 0,

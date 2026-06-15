@@ -276,7 +276,7 @@ final class App
         ];
     }
 
-    public function changeOwnPassword(int $userId, string $currentPassword, string $newPassword, string $confirmPassword): void
+    public function changeOwnPassword(int $userId, string $newPassword, string $confirmPassword): void
     {
         if ($newPassword === '' || strlen($newPassword) < 4) {
             throw new RuntimeException('Parola noua trebuie sa aiba minimum 4 caractere.');
@@ -284,14 +284,6 @@ final class App
 
         if ($newPassword !== $confirmPassword) {
             throw new RuntimeException('Confirmarea parolei nu se potriveste.');
-        }
-
-        $stmt = $this->pdo->prepare('SELECT password_hash FROM users WHERE id = ?');
-        $stmt->execute([$userId]);
-        $hash = $stmt->fetchColumn();
-
-        if (!$hash || !password_verify($currentPassword, (string) $hash)) {
-            throw new RuntimeException('Parola curenta este gresita.');
         }
 
         $this->pdo->prepare('UPDATE users SET password_hash = ? WHERE id = ?')
@@ -395,6 +387,56 @@ final class App
             $this->pdo->rollBack();
             throw $error;
         }
+    }
+
+    public function saveProcessor(array $data, int $userId): void
+    {
+        $id = (int) ($data['id'] ?? 0);
+        $name = trim($data['name']);
+        $cui = trim($data['cui']);
+        $address = trim($data['address']);
+        $processingPrice = (int) round(((float) str_replace(',', '.', $data['processing_price'])) * 100);
+        $exchangeShrinkage = (float) str_replace(',', '.', $data['exchange_shrinkage_pct']);
+        $purchaseShrinkage = (float) str_replace(',', '.', $data['purchase_shrinkage_pct']);
+
+        if ($name === '' || $cui === '' || $address === '') {
+            throw new RuntimeException('Numele, CUI si adresa procesatorului sunt obligatorii.');
+        }
+
+        $this->pdo->beginTransaction();
+        try {
+            if ($id > 0) {
+                $this->pdo->prepare(
+                    'UPDATE processors
+                     SET name = ?, cui = ?, address = ?, processing_price_cents = ?, exchange_shrinkage_pct = ?, purchase_shrinkage_pct = ?
+                     WHERE id = ?'
+                )->execute([$name, $cui, $address, $processingPrice, $exchangeShrinkage, $purchaseShrinkage, $id]);
+                $processorId = $id;
+                $operation = 'PROCESSOR_UPDATE';
+            } else {
+                $this->pdo->prepare(
+                    'INSERT INTO processors (name, cui, address, contact, processing_price_cents, exchange_shrinkage_pct, purchase_shrinkage_pct)
+                     VALUES (?, ?, ?, ?, ?, ?, ?)'
+                )->execute([$name, $cui, $address, '', $processingPrice, $exchangeShrinkage, $purchaseShrinkage]);
+                $processorId = (int) $this->pdo->lastInsertId();
+                $operation = 'PROCESSOR_CREATE';
+            }
+
+            $this->logAudit($userId, $operation, 'processors', $processorId, null, $name);
+            $this->pdo->commit();
+        } catch (Throwable $error) {
+            $this->pdo->rollBack();
+            throw $error;
+        }
+    }
+
+    public function roleHasPermission(string $role, string $permission): bool
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT allowed FROM role_permissions WHERE role_name = ? AND permission_code = ? LIMIT 1'
+        );
+        $stmt->execute([$role, $permission]);
+        return (bool) $stmt->fetchColumn();
     }
 
     public function permissions(): array
