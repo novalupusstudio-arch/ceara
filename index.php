@@ -27,6 +27,15 @@ $auth = new Auth($pdo);
 $app = new App($pdo);
 $page = $_GET['page'] ?? 'dashboard';
 
+if ($page === 'customer_lookup') {
+    require_login();
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode([
+        'customers' => $app->searchCustomers((string) ($_GET['customer_type'] ?? 'PF'), (string) ($_GET['term'] ?? '')),
+    ]);
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         $action = $_POST['action'] ?? '';
@@ -47,13 +56,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($action === 'create_processing') {
+            $assignedStore = $app->userPrimaryStore($user['id']);
+            if (!$assignedStore) {
+                throw new RuntimeException('Utilizatorul nu are o gestiune alocata.');
+            }
+
             $app->createProcessingLot([
                 'customer_name' => post_string('customer_name'),
                 'customer_phone' => post_string('customer_phone'),
+                'customer_address' => post_string('customer_address'),
+                'customer_type' => post_string('customer_type', 'PF'),
+                'customer_name_pj' => post_string('customer_name_pj'),
+                'customer_phone_pj' => post_string('customer_phone_pj'),
+                'customer_address_pj' => post_string('customer_address_pj'),
+                'customer_cui' => post_string('customer_cui'),
+                'customer_representative' => post_string('customer_representative'),
+                'existing_customer_id' => post_int('existing_customer_id'),
+                'force_new_customer' => post_int('force_new_customer'),
                 'known_customer' => isset($_POST['known_customer']),
                 'gross_kg' => post_string('gross_kg'),
-                'shrinkage_pct' => post_string('shrinkage_pct'),
-                'store_id' => post_int('store_id'),
+                'store_id' => (int) $assignedStore['id'],
                 'processor_id' => post_int('processor_id'),
             ], $user['id']);
             flash('Lotul de procesare a fost creat.');
@@ -190,7 +212,12 @@ if (!in_array($page, $allowed, true)) {
 
 $data = match ($page) {
     'dashboard' => $app->dashboard(),
-    'processing' => ['lots' => $app->processingLots(), 'stores' => $app->stores(), 'processors' => $app->processors()],
+    'processing' => [
+        'lots' => $app->processingLots(),
+        'processors' => $app->processors(),
+        'assigned_store' => $app->userPrimaryStore(current_user()['id']),
+        'default_processor' => $app->defaultProcessor(),
+    ],
     'purchases' => ['lots' => $app->purchaseLots(), 'stores' => $app->stores(), 'processors' => $app->processors()],
     'documents' => ['documents' => $app->documents()],
     'reports' => ['dashboard' => $app->dashboard(), 'processing' => $app->processingLots(), 'purchases' => $app->purchaseLots()],

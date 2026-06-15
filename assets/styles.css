@@ -288,6 +288,74 @@ label select {
   align-items: end;
 }
 
+.processing-form {
+  display: grid;
+  gap: 16px;
+}
+
+.customer-type-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.radio-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fbfcfb;
+  color: var(--text);
+  padding: 0 14px;
+}
+
+.radio-chip input {
+  width: auto;
+  min-height: 0;
+  accent-color: var(--accent);
+}
+
+.customer-search-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.lookup-results {
+  display: grid;
+  gap: 8px;
+}
+
+.lookup-option,
+.lookup-empty {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfb;
+  color: var(--text);
+  padding: 12px 14px;
+  text-align: left;
+}
+
+.lookup-option strong,
+.lookup-option span,
+.lookup-option small {
+  display: block;
+}
+
+.lookup-option span,
+.lookup-option small,
+.lookup-empty {
+  color: var(--muted);
+}
+
+.is-hidden {
+  display: none !important;
+}
+
 .wide {
   grid-column: span 2;
 }
@@ -527,6 +595,7 @@ th {
   .flow-grid,
   .two-column,
   .form-grid,
+  .customer-search-row,
   .login-shell,
   .store-row,
   .processor-row {

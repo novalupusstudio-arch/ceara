@@ -15,7 +15,29 @@ final class App
 
     public function processors(): array
     {
-        return $this->pdo->query('SELECT * FROM processors ORDER BY name')->fetchAll();
+        return $this->pdo->query('SELECT * FROM processors ORDER BY id')->fetchAll();
+    }
+
+    public function userPrimaryStore(int $userId): ?array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT s.*
+             FROM user_stores us
+             JOIN stores s ON s.id = us.store_id
+             WHERE us.user_id = ?
+             ORDER BY us.store_id
+             LIMIT 1'
+        );
+        $stmt->execute([$userId]);
+        $store = $stmt->fetch();
+        return $store ?: null;
+    }
+
+    public function defaultProcessor(): ?array
+    {
+        $stmt = $this->pdo->query('SELECT * FROM processors ORDER BY id LIMIT 1');
+        $processor = $stmt->fetch();
+        return $processor ?: null;
     }
 
     public function dashboard(): array
@@ -33,7 +55,7 @@ final class App
     public function processingLots(): array
     {
         return $this->pdo->query(
-            'SELECT p.*, c.name AS customer_name, s.name AS store_name, pr.name AS processor_name
+            'SELECT p.*, c.name AS customer_name, c.customer_type, s.name AS store_name, pr.name AS processor_name
              FROM processing_lots p
              JOIN customers c ON c.id = p.customer_id
              JOIN stores s ON s.id = p.store_id
@@ -78,23 +100,26 @@ final class App
     {
         $this->pdo->beginTransaction();
         try {
-            $customerId = $this->upsertCustomer($data['customer_name'], $data['customer_phone'], $data['known_customer']);
+            $customer = $this->resolveProcessingCustomer($data);
             $lotNumber = $this->nextLotNumber('PROC');
             $gross = kg_to_grams($data['gross_kg']);
-            $shrinkage = (float) $data['shrinkage_pct'];
+            $processor = $this->processingProcessorData((int) $data['processor_id']);
+            $shrinkage = (float) $processor['exchange_shrinkage_pct'];
+            $processingPriceCents = (int) $processor['processing_price_cents'];
             $foundation = max(0, (int) round($gross * (1 - ($shrinkage / 100))));
             $status = $data['known_customer'] ? 'Acceptat' : 'In Validare';
 
             $stmt = $this->pdo->prepare(
                 'INSERT INTO processing_lots
-                (lot_number, customer_id, status, gross_g, shrinkage_pct, foundation_g, store_id, processor_id, created_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                (lot_number, customer_id, status, gross_g, processing_price_cents, shrinkage_pct, foundation_g, store_id, processor_id, created_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
             );
             $stmt->execute([
                 $lotNumber,
-                $customerId,
+                $customer['id'],
                 $status,
                 $gross,
+                $processingPriceCents,
                 $shrinkage,
                 $foundation,
                 $data['store_id'],
@@ -471,7 +496,7 @@ final class App
 
     public function users(): array
     {
-        return $this->pdo->query('SELECT id, username, full_name, role, active, created_at FROM users ORDER BY id')->fetchAll();
+            return $this->pdo->query('SELECT id, username, full_name, role, active, created_at FROM users ORDER BY id')->fetchAll();
     }
 
     public function userStores(): array
@@ -484,10 +509,86 @@ final class App
         return $map;
     }
 
-    private function upsertCustomer(string $name, string $phone, bool $known): int
+    public function searchCustomers(string $customerType, string $term): array
     {
-        $stmt = $this->pdo->prepare('INSERT INTO customers (name, phone, known_customer) VALUES (?, ?, ?)');
-        $stmt->execute([$name, $phone, $known ? 1 : 0]);
+        $customerType = $customerType === 'PJ' ? 'PJ' : 'PF';
+        $term = trim($term);
+        if ($term === '') {
+            return [];
+        }
+
+        $field = $customerType === 'PJ' ? 'cui' : 'phone';
+        $stmt = $this->pdo->prepare(
+            "SELECT id, customer_type, name, phone, address, cui, representative
+             FROM customers
+             WHERE customer_type = ? AND $field LIKE ?
+             ORDER BY id DESC
+             LIMIT 8"
+        );
+        $stmt->execute([$customerType, '%' . $term . '%']);
+        return $stmt->fetchAll();
+    }
+
+    private function resolveProcessingCustomer(array $data): array
+    {
+        $customerType = $data['customer_type'] === 'PJ' ? 'PJ' : 'PF';
+        $existingCustomerId = (int) ($data['existing_customer_id'] ?? 0);
+        $isNewCustomer = !empty($data['force_new_customer']);
+
+        if ($existingCustomerId > 0 && !$isNewCustomer) {
+            $existing = $this->find('customers', $existingCustomerId);
+            if (!$existing) {
+                throw new RuntimeException('Clientul selectat nu mai exista.');
+            }
+            return $existing;
+        }
+
+        $customerId = $this->upsertCustomer([
+            'customer_type' => $customerType,
+            'name' => $customerType === 'PJ'
+                ? trim((string) ($data['customer_name_pj'] ?? $data['customer_name']))
+                : trim((string) $data['customer_name']),
+            'phone' => $customerType === 'PJ'
+                ? trim((string) ($data['customer_phone_pj'] ?? $data['customer_phone']))
+                : trim((string) $data['customer_phone']),
+            'address' => $customerType === 'PJ'
+                ? trim((string) ($data['customer_address_pj'] ?? $data['customer_address']))
+                : trim((string) $data['customer_address']),
+            'cui' => trim((string) ($data['customer_cui'] ?? '')),
+            'representative' => trim((string) ($data['customer_representative'] ?? '')),
+            'known_customer' => !empty($data['known_customer']),
+        ]);
+
+        $created = $this->find('customers', $customerId);
+        if (!$created) {
+            throw new RuntimeException('Clientul nu a putut fi creat.');
+        }
+        return $created;
+    }
+
+    private function upsertCustomer(array $customer): int
+    {
+        if ($customer['name'] === '' || $customer['phone'] === '' || $customer['address'] === '') {
+            throw new RuntimeException('Numele, telefonul si adresa sunt obligatorii.');
+        }
+
+        if ($customer['customer_type'] === 'PJ' && ($customer['cui'] === '' || $customer['representative'] === '')) {
+            throw new RuntimeException('Pentru PJ sunt obligatorii CUI-ul si reprezentantul.');
+        }
+
+        $stmt = $this->pdo->prepare(
+            'INSERT INTO customers (customer_type, name, phone, address, cui, representative, known_customer)
+             VALUES (?, ?, ?, ?, ?, ?, ?)'
+        );
+        $stmt->execute([
+            $customer['customer_type'],
+            $customer['name'],
+            $customer['phone'],
+            $customer['address'],
+            $customer['cui'],
+            $customer['representative'],
+            $customer['known_customer'] ? 1 : 0,
+        ]);
         return (int) $this->pdo->lastInsertId();
     }
 
@@ -561,5 +662,22 @@ final class App
         $stmt->execute([$id]);
         $row = $stmt->fetch();
         return $row ?: null;
+    }
+
+    private function processingProcessorData(int $processorId): array
+    {
+        if ($processorId <= 0) {
+            return [
+                'id' => null,
+                'processing_price_cents' => 0,
+                'exchange_shrinkage_pct' => 0,
+            ];
+        }
+
+        $processor = $this->find('processors', $processorId);
+        if (!$processor) {
+            throw new RuntimeException('Procesatorul selectat nu exista.');
+        }
+        return $processor;
     }
 }

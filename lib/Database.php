@@ -75,6 +75,22 @@ final class Database
         if (!$column) {
             $pdo->exec("ALTER TABLE processors ADD address VARCHAR(255) NOT NULL DEFAULT '' AFTER cui");
         }
+
+        $customerColumns = [
+            'customer_type' => "ALTER TABLE customers ADD customer_type ENUM('PF', 'PJ') NOT NULL DEFAULT 'PF' AFTER id",
+            'address' => "ALTER TABLE customers ADD address VARCHAR(255) NOT NULL DEFAULT '' AFTER phone",
+            'cui' => "ALTER TABLE customers ADD cui VARCHAR(40) NOT NULL DEFAULT '' AFTER address",
+            'representative' => "ALTER TABLE customers ADD representative VARCHAR(160) NOT NULL DEFAULT '' AFTER cui",
+        ];
+        foreach ($customerColumns as $name => $sql) {
+            if (!$pdo->query("SHOW COLUMNS FROM customers LIKE '$name'")->fetch()) {
+                $pdo->exec($sql);
+            }
+        }
+
+        if (!$pdo->query("SHOW COLUMNS FROM processing_lots LIKE 'processing_price_cents'")->fetch()) {
+            $pdo->exec("ALTER TABLE processing_lots ADD processing_price_cents INT NOT NULL DEFAULT 0 AFTER gross_g");
+        }
     }
 
     private function seed(PDO $pdo): void

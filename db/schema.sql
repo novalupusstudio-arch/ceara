@@ -51,8 +51,12 @@ CREATE TABLE IF NOT EXISTS processors (
 
 CREATE TABLE IF NOT EXISTS customers (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    customer_type ENUM('PF', 'PJ') NOT NULL DEFAULT 'PF',
     name VARCHAR(160) NOT NULL,
     phone VARCHAR(80) NOT NULL DEFAULT '',
+    address VARCHAR(255) NOT NULL DEFAULT '',
+    cui VARCHAR(40) NOT NULL DEFAULT '',
+    representative VARCHAR(160) NOT NULL DEFAULT '',
     known_customer TINYINT(1) NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -71,6 +75,7 @@ CREATE TABLE IF NOT EXISTS processing_lots (
     customer_id INT NOT NULL,
     status ENUM('In Validare', 'Acceptat', 'Predat Fabricii', 'Respins', 'Returnat') NOT NULL,
     gross_g INT NOT NULL,
+    processing_price_cents INT NOT NULL DEFAULT 0,
     shrinkage_pct DECIMAL(6,3) NOT NULL DEFAULT 0,
     foundation_g INT NOT NULL,
     store_id INT NOT NULL,

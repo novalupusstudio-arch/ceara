@@ -4,8 +4,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= h($config['app_name']) ?></title>
-    <link rel="stylesheet" href="assets/styles.css">
-    <script src="assets/app.js" defer></script>
+    <link rel="stylesheet" href="assets/styles.css?v=<?= h($config['app_version']) ?>">
+    <script src="assets/app.js?v=<?= h($config['app_version']) ?>" defer></script>
 </head>
 <body>
     <aside class="sidebar">
