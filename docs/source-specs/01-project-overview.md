@@ -1,14 +1,17 @@
 # Project Overview
 
-## Scop
-Aplicație web pentru:
-1. Procesare ceară (schimb ceară contra faguri)
-2. Achiziție ceară
+## Scope
 
-## Principii
-- Trasabilitate completă pe loturi.
-- Separare totală între custodie și proprietatea firmei.
-- Audit complet.
-- Multi-magazin.
-- Multi-procesator.
-- Integrare facturare.
+Application for:
+
+1. Processing customer wax into wax foundations.
+2. Purchasing wax for company-owned stock.
+
+## Principles
+
+- Full lot traceability.
+- Separate custody stock from company-owned stock.
+- Append-only audit trail.
+- Multi-store support.
+- Multi-processor support.
+- Mock fiscal/document outputs first.

@@ -2,58 +2,52 @@
 
 ## Purpose
 
-Ceara is a web application for managing two business flows:
+Ceara is a PHP + MySQL web app for managing a wax business with two core flows:
 
-1. Wax processing: exchanging customer wax for wax foundations.
-2. Wax purchase: buying wax and converting it into company-owned stock.
+1. Processing customer wax into wax foundations.
+2. Purchasing wax and turning it into company-owned inventory.
 
-The core product goal is complete traceability by lot, with strict separation between customer custody inventory and company-owned inventory.
+The core goal is lot traceability, with clear separation between customer custody stock and company-owned stock.
 
 ## Principles
 
 - Full lot traceability.
-- Complete separation between custody stock and company-owned stock.
-- Complete audit trail for sensitive operations.
+- Separate custody stock from company-owned stock.
+- Append-only audit trail for sensitive actions.
 - Multi-store support.
 - Multi-processor support.
-- Future billing/fiscal integration.
+- Mock fiscal/document outputs first, real integrations later.
 
 ## Users and Roles
 
 ### Admin
 
-Admins can manage:
+The seeded initial admin is `admin / admin`.
+
+Admin can manage:
 
 - users
 - roles and permissions
 - stores
 - processors
-- prices
-- shrinkage rules
-- integrations
+- settings
 - audit access
 
 ### Operator
 
-Operators can:
+Operator can:
 
-- create and process wax lots
-- create wax purchases
-- generate operational documents
-- access only assigned stores
-
-### Initial Access
-
-- The initial seeded user is an admin account.
-- Initial credentials: `admin` / `admin`.
-- After first login, the admin can create other users and change passwords.
-- Password-change enforcement after first login is desirable, but can be handled after the basic MVP login works.
+- create processing lots
+- create purchase lots
+- use the assigned store only
+- work inside the permissions granted by role
 
 ## Recommended Permissions
 
 - `USER_CREATE`
 - `USER_EDIT`
 - `USER_RESET_PASSWORD`
+- `ROLE_PERMISSION_MANAGE`
 - `STORE_MANAGE`
 - `PROCESSOR_MANAGE`
 - `PROCESSING_CREATE`
@@ -86,110 +80,83 @@ Operators can:
 
 - name
 - CUI
+- address
 - contact
 - processing price
 - exchange shrinkage percentage
-- purchase shrinkage percentage
-
-### Billing
-
-- API endpoint
-- token
-- invoice series
-- document series
 
 ### Document Series
 
-- Document numbering starts simple for MVP: `1`, `2`, `3`, increasing per document type.
-- Every document has a store/gestiune-specific series.
-- Series are configured in settings per store/gestiune.
-- Exact numbering rules can be refined after the first usable flow is implemented.
+- Every document has a store / gestiune series.
+- Numbering starts simple for MVP: `1`, `2`, `3`.
+- The exact numbering rules can be refined later.
 
 ## Processing Flow
 
 ### Statuses
 
-- In Validare
-- Acceptat
-- Predat Fabricii
-- Respins
-- Returnat
+- `In Validare`
+- `Acceptat`
+- `Predat Fabricii`
+- `Respins`
+- `Returnat`
 
-### Known Customer Flow
+### Current Behavior
 
-1. PV Custodie
-2. Acceptare
-3. Factură
-4. Bon fiscal
-5. PV Predare Faguri
-6. Status Acceptat
+- New lots start in `In Validare`.
+- The lot board is the main validation screen.
+- `Acceptat` is the end state on the lot board.
+- Predarea la fabrica is handled in batch on a separate page.
 
-### Unknown Customer Flow
+### Main Screens
 
-1. PV Custodie
-2. Status In Validare
-3. Predare lot la fabrică
-4. Acceptat or Respins
-5. If accepted: Factură + PV Predare
-6. If rejected: PV Returnare
-
-### Lot Transitions
-
-- In Validare -> Acceptat
-- In Validare -> Respins
-- Acceptat -> Predat Fabricii
-- Respins -> Returnat
+- Processing lot creation
+- Lot board with live filters
+- Batch factory delivery page
 
 ## Purchase Flow
 
 ### Supplier Types
 
-- PF, using borderou
-- Agricultural producer
-- PFA/SRL
+- PF
+- PFA
+- PJ / SRL
 
-### Flow
+### Current Behavior
 
-1. Achiziție
-2. NIR
-3. Stoc ceară proprie
-4. Predare la procesator
-5. Recepție faguri
-6. Stoc marfă
+- Purchase flow exists as a separate business path.
+- It follows the same general model of mock documents and stock movement.
 
 ## Documents
 
 ### Processing Documents
 
-- PV predare în custodie
-- Factură serviciu
+- PV custodie
+- Factura serviciu
 - Bon fiscal
-- PV predare faguri
-- PV returnare ceară
-- Aviz predare procesator
-- NIR custodie faguri
+- PV returnare
+- AVIZ procesator
+- NIR
 
 ### Purchase Documents
 
 - Borderou
-- Factură furnizor
-- NIR materie primă
-- Aviz procesator
+- Factura furnizor
+- NIR materie prima
+- AVIZ procesator
 - NIR produse finite
 
 ### Fiscal Output
 
-- Billing starts as a mock integration.
-- In production, invoices will be sent to a third-party billing API.
-- Fiscal receipts will follow a similar integration pattern, but output text files for the cash register.
-- The MVP should isolate fiscal generation behind an internal service/interface so mock and real integrations can be swapped later.
+- Documents are mock records for now.
+- Future integrations will replace the mock layer later.
 
 ## Inventory Model
 
 ### Custody
 
-- operational wax foundation stock
 - customer wax
+- operational wax foundations
 
 ### Company-Owned
 
@@ -200,22 +167,23 @@ Custody stock and company-owned stock must never be mixed.
 
 ### Quantity Precision
 
-- Inventory quantities are stored in grams.
-- UI presents quantities in kilograms with three decimals, for example `1.234 kg`.
-- Calculations should use integer grams to avoid decimal drift.
+- Store quantities in grams.
+- Show quantities in kilograms with three decimals.
+- Keep calculations in integer grams to avoid rounding drift.
 
 ## Dashboard
 
 ### Main Actions
 
-- Procesare Ceară
-- Achiziție Ceară
+- Procesare Ceara
+- Achizitie Ceara
 
 ### KPI
 
 - operational wax foundation stock
 - wax in custody
 - lots pending validation
+- accepted lots
 - rejected lots
 - company-owned wax stock
 - merchandise wax foundation stock
@@ -232,13 +200,13 @@ Custody stock and company-owned stock must never be mixed.
 ### Purchase
 
 - PF purchases
-- PFA/SRL purchases
+- PFA/PJ purchases
 - wax stock
 - wax foundation stock
 
 ## Audit
 
-Every important operation should log:
+Log every important operation with:
 
 - user
 - date
@@ -254,21 +222,21 @@ Audit records are append-only and must not be deleted.
 - POS
 - SMS
 - Email
-- QR Codes
+- QR codes
 - Mobile app
 
 ## Technical Stack
 
-- Backend: plain PHP.
-- Database: MySQL.
-- Local runtime: XAMPP.
-- Frontend: server-rendered PHP pages with focused HTML/CSS/JavaScript unless a later requirement justifies extra tooling.
-- Development source remains in `E:\NovaLupus\ceara`.
-- XAMPP test copy remains in `E:\XAMP\htdocs\ceara`.
+- Backend: plain PHP
+- Database: MySQL
+- Local runtime: XAMPP
+- Frontend: server-rendered PHP with light JavaScript helpers
+- Source workspace: `E:\NovaLupus\ceara`
+- XAMPP test copy: `E:\XAMP\htdocs\ceara`
 
 ## Database Direction
 
-Main tables:
+Main tables include:
 
 - `users`
 - `roles`
@@ -278,63 +246,17 @@ Main tables:
 - `customers`
 - `suppliers`
 - `processing_lots`
+- `processing_lot_status_events`
+- `factory_batches`
+- `factory_batch_items`
 - `purchase_lots`
 - `documents`
 - `inventory_transactions`
 - `audit_log`
 
-### `processing_lots`
-
-- `id`
-- `lot_number`
-- `customer_id`
-- `status`
-- `gross_kg`
-- `shrinkage_pct`
-- `foundation_kg`
-- `store_id`
-- `created_by`
-
-### `inventory_transactions`
-
-- `id`
-- `date`
-- `type`
-- `qty`
-- `store_id`
-- `reference_document`
-
-## UI Direction
-
-### Dashboard
-
-The dashboard starts with two primary actions:
-
-- Procesare Ceară
-- Achiziție Ceară
-
-It should also show the KPI listed above.
-
-### Processing
-
-- lot list
-- create lot
-- accept lot
-- reject lot
-- send to factory
-
-### Purchase
-
-- create purchase
-- NIR
-- send to factory
-- receive wax foundations
-
 ## Open Decisions
 
-- Exact database schema and migrations.
-- Password reset flow after admin-created users exist.
-- Whether to enforce password change on first login.
-- Exact document numbering rules beyond simple increasing numbers per store/gestiune series.
-- Whether unknown customer validation requires processor feedback before accept/reject.
-- Whether inventory quantities need batch/lot-level costing.
+- Final lot and document numbering rules.
+- Whether batch history needs dedicated screens.
+- Whether more detailed per-lot delivery auditing is needed.
+- How strict password change enforcement should be for new users.

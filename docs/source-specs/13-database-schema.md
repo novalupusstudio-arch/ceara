@@ -1,34 +1,25 @@
 # Database Schema
 
-## Tabele principale
-users
-roles
-permissions
-stores
-processors
-customers
-suppliers
-processing_lots
-purchase_lots
-documents
-inventory_transactions
-audit_log
+## Main Tables
 
-## processing_lots
-id
-lot_number
-customer_id
-status
-gross_kg
-shrinkage_pct
-foundation_kg
-store_id
-created_by
+- `users`
+- `roles`
+- `permissions`
+- `stores`
+- `processors`
+- `customers`
+- `suppliers`
+- `processing_lots`
+- `processing_lot_status_events`
+- `factory_batches`
+- `factory_batch_items`
+- `purchase_lots`
+- `documents`
+- `inventory_transactions`
+- `audit_log`
 
-## inventory_transactions
-id
-date
-type
-qty
-store_id
-reference_document
+## Notes
+
+- `processing_lots` tracks the current lot state and quantities.
+- `processing_lot_status_events` keeps the lot history.
+- `factory_batches` and `factory_batch_items` store batch delivery history.

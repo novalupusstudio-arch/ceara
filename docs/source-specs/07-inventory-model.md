@@ -1,11 +1,15 @@
-# Model Stocuri
+# Inventory Model
 
-## Custodie
-- Stoc operațional faguri
-- Ceară client
+## Custody
 
-## Proprietate firmă
-- Ceară cumpărată
-- Faguri marfă
+- customer wax
+- operational wax foundations
 
-Nu se amestecă.
+## Company-Owned
+
+- purchased wax
+- merchandise wax foundations
+
+Custody and company-owned stock must never be mixed.
+
+Quantities are stored in grams and displayed in kilograms with three decimals.

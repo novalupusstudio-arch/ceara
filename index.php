@@ -73,19 +73,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'customer_representative' => post_string('customer_representative'),
                 'existing_customer_id' => post_int('existing_customer_id'),
                 'force_new_customer' => post_int('force_new_customer'),
-                'known_customer' => isset($_POST['known_customer']),
+                'known_customer' => post_int('known_customer'),
                 'gross_kg' => post_string('gross_kg'),
                 'store_id' => (int) $assignedStore['id'],
                 'processor_id' => post_int('processor_id'),
             ], $user['id']);
             flash('Lotul de procesare a fost creat.');
-            redirect('processing');
+            redirect('lots');
         }
 
         if ($action === 'transition_processing') {
             $app->transitionProcessingLot(post_int('lot_id'), post_string('transition'), $user['id']);
             flash('Statusul lotului a fost actualizat.');
-            redirect('processing');
+            redirect('lots');
+        }
+
+        if ($action === 'processing_document') {
+            $app->ensureProcessingDocument(post_int('lot_id'), post_string('document_type'), $user['id']);
+            flash('Documentul mock a fost generat.');
+            redirect('lots');
+        }
+
+        if ($action === 'create_factory_batch') {
+            $app->createFactoryBatch([
+                'processor_id' => post_int('processor_id'),
+                'lot_qty' => $_POST['lot_qty'] ?? [],
+            ], $user['id']);
+            flash('Predarea catre fabrica a fost salvata.');
+            redirect('factory_delivery', ['processor_id' => post_int('processor_id')]);
         }
 
         if ($action === 'create_purchase') {
@@ -205,7 +220,7 @@ if ($page === 'login') {
 
 require_login();
 
-$allowed = ['dashboard', 'processing', 'purchases', 'documents', 'reports', 'settings', 'audit'];
+$allowed = ['dashboard', 'processing', 'lots', 'factory_delivery', 'purchases', 'documents', 'reports', 'settings', 'audit'];
 if (!in_array($page, $allowed, true)) {
     $page = 'dashboard';
 }
@@ -213,11 +228,12 @@ if (!in_array($page, $allowed, true)) {
 $data = match ($page) {
     'dashboard' => $app->dashboard(),
     'processing' => [
-        'lots' => $app->processingLots(),
         'processors' => $app->processors(),
         'assigned_store' => $app->userPrimaryStore(current_user()['id']),
         'default_processor' => $app->defaultProcessor(),
     ],
+    'lots' => $app->processingLotsBoard((array) ($_GET['status'] ?? [])),
+    'factory_delivery' => $app->factoryDeliveryData((int) ($_GET['processor_id'] ?? 0)),
     'purchases' => ['lots' => $app->purchaseLots(), 'stores' => $app->stores(), 'processors' => $app->processors()],
     'documents' => ['documents' => $app->documents()],
     'reports' => ['dashboard' => $app->dashboard(), 'processing' => $app->processingLots(), 'purchases' => $app->purchaseLots()],

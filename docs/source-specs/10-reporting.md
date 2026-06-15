@@ -1,13 +1,15 @@
-# Rapoarte
+# Reporting
 
-## Procesare
-- loturi deschise
-- loturi acceptate
-- loturi respinse
-- ceară în custodie
+## Processing
 
-## Achiziție
-- achiziții PF
-- achiziții PFA/SRL
-- stoc ceară
-- stoc faguri
+- open lots
+- accepted lots
+- rejected lots
+- wax in custody
+
+## Purchase
+
+- PF purchases
+- PFA/PJ purchases
+- wax stock
+- wax foundation stock

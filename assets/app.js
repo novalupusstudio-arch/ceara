@@ -9,8 +9,82 @@ document.addEventListener("submit", (event) => {
 });
 
 document.addEventListener("DOMContentLoaded", () => {
+  const factoryForm = document.querySelector("[data-factory-form]");
+  if (factoryForm) {
+    const totalWax = factoryForm.querySelector("[data-factory-total-wax]");
+    const totalCost = factoryForm.querySelector("[data-factory-total-cost]");
+    const totalFoundation = factoryForm.querySelector("[data-factory-total-foundation]");
+    const rows = factoryForm.querySelectorAll("[data-factory-row]");
+
+    function renderFactoryTotals() {
+      let waxKg = 0;
+      let foundationKg = 0;
+      let costCents = 0;
+
+      rows.forEach((row) => {
+        const qtyInput = row.querySelector("[data-factory-qty]");
+        const rowCost = row.querySelector("[data-row-cost]");
+        const rowFoundation = row.querySelector("[data-row-foundation]");
+        const priceCents = Number(row.dataset.priceCents || factoryForm.dataset.priceCents || 0);
+        const shrinkagePct = Number(row.dataset.shrinkagePct || factoryForm.dataset.shrinkagePct || 0);
+        const qtyKg = Number(String(qtyInput.value || "0").replace(",", "."));
+        const rowCostCents = Math.max(0, Math.round(qtyKg * priceCents));
+        const rowFoundationKg = Math.max(0, qtyKg * (1 - (shrinkagePct / 100)));
+
+        waxKg += qtyKg;
+        foundationKg += rowFoundationKg;
+        costCents += rowCostCents;
+
+        rowCost.textContent = `${(rowCostCents / 100).toFixed(2)} lei`;
+        rowFoundation.textContent = `${rowFoundationKg.toFixed(3)} kg`;
+      });
+
+      totalWax.value = `${waxKg.toFixed(3)} kg`;
+      totalCost.value = `${(costCents / 100).toFixed(2)} lei`;
+      totalFoundation.value = `${foundationKg.toFixed(3)} kg`;
+    }
+
+    factoryForm.querySelectorAll("[data-factory-qty]").forEach((input) => {
+      input.addEventListener("input", renderFactoryTotals);
+      input.addEventListener("change", renderFactoryTotals);
+    });
+
+    renderFactoryTotals();
+    return;
+  }
+
   const form = document.querySelector("[data-processing-form]");
   if (!form) {
+    const board = document.querySelector("[data-lot-board]");
+    if (!board) {
+      return;
+    }
+
+    const filter = document.querySelector("[data-lot-filter]");
+    if (!filter) {
+      return;
+    }
+
+    const checkboxes = filter.querySelectorAll('input[type="checkbox"][name="status[]"]');
+    const rows = board.querySelectorAll('tbody tr[data-lot-status]');
+
+    function applyLotFilter() {
+      const active = new Set(
+        Array.from(checkboxes)
+          .filter((checkbox) => checkbox.checked)
+          .map((checkbox) => checkbox.value)
+      );
+
+      rows.forEach((row) => {
+        row.hidden = !active.has(row.dataset.lotStatus);
+      });
+    }
+
+    checkboxes.forEach((checkbox) => {
+      checkbox.addEventListener("change", applyLotFilter);
+    });
+
+    applyLotFilter();
     return;
   }
 
@@ -33,6 +107,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const processorSelect = form.querySelector("[data-processor-select]");
   const processingPrice = form.querySelector("[data-processing-price]");
   const processingShrinkage = form.querySelector("[data-processing-shrinkage]");
+  const processingExchange = form.querySelector("[data-processing-exchange]");
+  const processingCost = form.querySelector("[data-processing-cost]");
+  const grossInput = form.querySelector('input[name="gross_kg"]');
   const nameLabel = form.querySelector("[data-name-label]");
   const phoneLabel = form.querySelector("[data-phone-label]");
   const pfFields = form.querySelectorAll("[data-pf-field]");
@@ -115,8 +192,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const processor = processors.find((item) => item.id === selectedId);
     const cents = processor ? processor.processing_price_cents : 0;
     const shrinkage = processor ? Number(processor.exchange_shrinkage_pct) : 0;
+    const grossValue = Number(String(grossInput.value || "0").replace(",", "."));
+    const exchangeKg = Math.max(0, grossValue * (1 - (shrinkage / 100)));
+    const processingKg = Math.max(0, grossValue);
+    const costCents = Math.max(0, Math.round(processingKg * cents));
     processingPrice.value = `${(cents / 100).toFixed(2)} lei`;
     processingShrinkage.value = shrinkage.toFixed(3);
+    processingExchange.value = `${exchangeKg.toFixed(3)} kg`;
+    processingCost.value = `${(costCents / 100).toFixed(2)} lei`;
   }
 
   function applyCustomer(customer) {
@@ -192,6 +275,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   processorSelect.addEventListener("change", renderProcessorValues);
+  grossInput.addEventListener("input", renderProcessorValues);
 
   searchInput.addEventListener("input", () => {
     existingCustomerId.value = "0";

@@ -1,30 +1,32 @@
 # Settings
 
-## Date firmă
-- denumire
+## Company Data
+
+- name
 - CUI
-- Reg. Comerțului
-- adresă
-- bancă
+- trade registry number
+- address
+- bank
 - IBAN
-- telefon
+- phone
 - email
 
-## Gestiuni
-- cod
-- denumire
-- adresă
+## Stores
 
-## Procesatori
-- denumire
+- code
+- name
+- address
+
+## Processors
+
+- name
 - CUI
+- address
 - contact
-- preț procesare
-- scăzământ schimb
-- scăzământ achiziție
+- processing price
+- shrinkage percentage
 
-## Facturare
-- API endpoint
-- token
-- serii facturi
-- serii documente
+## Document Series
+
+- store / gestiune series
+- simple increasing numbers for MVP

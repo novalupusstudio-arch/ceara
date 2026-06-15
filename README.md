@@ -12,10 +12,10 @@ Web application project workspace.
 ## Workflow
 
 1. Keep source changes in this repository.
-2. Commit small, focused checkpoints.
+2. Keep the specification files in sync with implementation.
 3. Use `scripts/sync-to-xampp.ps1` to copy the working tree into the XAMPP test folder.
 4. Test through the local XAMPP URL once the app structure exists.
-5. Record requirements and decisions in `docs/spec.md`.
+5. Record requirements and decisions in `docs/spec.md`, `PROJECT_CONTEXT.md`, `AI_HANDOVER.md`, and `decisions/architecture-decisions.md`.
 
 ## MVP Stack
 
@@ -58,4 +58,4 @@ Quantities are stored as integer grams and displayed as kilograms with three dec
 
 ## Project Status
 
-MVP generated from the initial wax application specs.
+Working MVP for the main processing and factory-delivery flows.

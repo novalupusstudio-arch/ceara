@@ -1,17 +1,18 @@
-# Documente
+# Documents
 
-## Procesare
-- PV predare în custodie
-- Factură serviciu
+## Processing
+
+- PV custodie
+- Factura serviciu
 - Bon fiscal
-- PV predare faguri
-- PV returnare ceară
-- Aviz predare procesator
-- NIR custodie faguri
+- PV returnare
+- AVIZ procesator
+- NIR
 
-## Achiziție
+## Purchase
+
 - Borderou
-- Factură furnizor
-- NIR materie primă
-- Aviz procesator
+- Factura furnizor
+- NIR materie prima
+- AVIZ procesator
 - NIR produse finite

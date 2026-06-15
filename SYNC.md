@@ -16,5 +16,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\sync-to-xampp.ps1
 
 The script copies project files while skipping `.git`, dependency folders, build caches, and local-only files.
 
-When the app stack is chosen, this document should be updated with the exact local URL, database setup, and any service steps.
+Current local setup:
 
+- URL: `http://localhost/ceara/`
+- Database: MySQL via XAMPP
+- Default credentials: `admin` / `admin`
+
+Keep this document aligned with the working local deployment path.

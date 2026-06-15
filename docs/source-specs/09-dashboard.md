@@ -1,13 +1,16 @@
 # Dashboard
 
-## Butoane principale
-1. Procesare Ceară
-2. Achiziție Ceară
+## Main Actions
+
+1. Procesare Ceara
+2. Achizitie Ceara
 
 ## KPI
-- stoc faguri operațional
-- ceară în custodie
-- loturi în validare
-- loturi respinse
-- stoc ceară proprie
-- stoc faguri marfă
+
+- operational wax foundation stock
+- wax in custody
+- lots in validation
+- accepted lots
+- rejected lots
+- company-owned wax stock
+- merchandise wax foundation stock

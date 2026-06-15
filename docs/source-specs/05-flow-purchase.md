@@ -1,14 +1,13 @@
-# Flow Achiziție Ceară
+# Flow Purchase Wax
 
-## Tipuri
-- PF (borderou)
-- Producător agricol
-- PFA/SRL
+## Types
 
-## Flux
-1. Achiziție
-2. NIR
-3. Stoc ceară proprie
-4. Predare la procesator
-5. Recepție faguri
-6. Stoc marfă
+- PF
+- PFA
+- PJ / SRL
+
+## Flow
+
+1. Create purchase lot.
+2. Generate mock purchase documents.
+3. Move wax into company-owned stock.

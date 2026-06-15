@@ -1,8 +1,8 @@
-# Integrări
+# Future Integrations
 
 - eFactura
 - POS
 - SMS
 - Email
-- QR Codes
-- Aplicație mobilă
+- QR codes
+- Mobile app

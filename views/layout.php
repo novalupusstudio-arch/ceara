@@ -20,6 +20,8 @@
             <?php foreach ([
                 'dashboard' => 'Dashboard',
                 'processing' => 'Procesare ceara',
+                'lots' => 'Loturi ceara',
+                'factory_delivery' => 'Predare fabrica',
                 'purchases' => 'Achizitie ceara',
                 'documents' => 'Documente',
                 'reports' => 'Rapoarte',

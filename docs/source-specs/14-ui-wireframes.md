@@ -1,17 +1,18 @@
 # UI Wireframes
 
 ## Dashboard
-[ Procesare Ceară ]   [ Achiziție Ceară ]
 
-## Procesare
-- listă loturi
-- creare lot
-- acceptare
-- respingere
-- predare fabrică
+[ Procesare Ceara ]   [ Achizitie Ceara ]
 
-## Achiziție
-- creare achiziție
+## Processing
+
+- lot creation form
+- lot board with filters
+- accept / reject actions
+- dedicated factory delivery page
+
+## Purchase
+
+- purchase creation form
 - NIR
-- predare fabrică
-- recepție faguri
+- receipt of wax foundations

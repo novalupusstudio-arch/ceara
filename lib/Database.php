@@ -91,6 +91,59 @@ final class Database
         if (!$pdo->query("SHOW COLUMNS FROM processing_lots LIKE 'processing_price_cents'")->fetch()) {
             $pdo->exec("ALTER TABLE processing_lots ADD processing_price_cents INT NOT NULL DEFAULT 0 AFTER gross_g");
         }
+        if (!$pdo->query("SHOW COLUMNS FROM processing_lots LIKE 'factory_sent_g'")->fetch()) {
+            $pdo->exec("ALTER TABLE processing_lots ADD factory_sent_g INT NOT NULL DEFAULT 0 AFTER gross_g");
+        }
+
+        $table = $pdo->query("SHOW TABLES LIKE 'processing_lot_status_events'")->fetchColumn();
+        if (!$table) {
+            $pdo->exec(
+                "CREATE TABLE processing_lot_status_events (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    lot_id INT NOT NULL,
+                    status ENUM('In Validare', 'Acceptat', 'Predat Fabricii', 'Respins', 'Returnat') NOT NULL,
+                    created_by INT NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (lot_id) REFERENCES processing_lots(id) ON DELETE CASCADE,
+                    FOREIGN KEY (created_by) REFERENCES users(id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+            );
+        }
+
+        $table = $pdo->query("SHOW TABLES LIKE 'factory_batches'")->fetchColumn();
+        if (!$table) {
+            $pdo->exec(
+                "CREATE TABLE factory_batches (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    batch_number VARCHAR(40) NOT NULL UNIQUE,
+                    processor_id INT NOT NULL,
+                    store_id INT NOT NULL,
+                    wax_g INT NOT NULL,
+                    foundation_g INT NOT NULL,
+                    processing_cost_cents INT NOT NULL DEFAULT 0,
+                    created_by INT NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (processor_id) REFERENCES processors(id),
+                    FOREIGN KEY (store_id) REFERENCES stores(id),
+                    FOREIGN KEY (created_by) REFERENCES users(id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+            );
+        }
+
+        $table = $pdo->query("SHOW TABLES LIKE 'factory_batch_items'")->fetchColumn();
+        if (!$table) {
+            $pdo->exec(
+                "CREATE TABLE factory_batch_items (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    batch_id INT NOT NULL,
+                    processing_lot_id INT NOT NULL,
+                    wax_g INT NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (batch_id) REFERENCES factory_batches(id) ON DELETE CASCADE,
+                    FOREIGN KEY (processing_lot_id) REFERENCES processing_lots(id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+            );
+        }
     }
 
     private function seed(PDO $pdo): void

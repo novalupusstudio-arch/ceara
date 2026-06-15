@@ -1,10 +1,11 @@
 # Audit
 
-Se loghează:
-- utilizator
-- dată
-- operațiune
-- valoare veche
-- valoare nouă
+Log:
 
-Nu se șterge.
+- user
+- date
+- operation
+- old value
+- new value
+
+Audit entries are append-only.

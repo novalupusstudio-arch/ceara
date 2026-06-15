@@ -25,7 +25,7 @@ $assignedStore = $data['assigned_store'] ?? null;
         <input type="hidden" name="action" value="create_processing">
         <input type="hidden" name="existing_customer_id" value="0" data-existing-customer-id>
         <input type="hidden" name="force_new_customer" value="0" data-force-new-customer>
-        <input type="hidden" name="known_customer" value="1">
+        <input type="hidden" name="known_customer" value="0">
 
         <div class="customer-type-switch">
             <span class="field-title">Tip client</span>
@@ -108,6 +108,14 @@ $assignedStore = $data['assigned_store'] ?? null;
             <label>
                 Scazamant %
                 <input value="0.000" readonly data-processing-shrinkage>
+            </label>
+            <label>
+                Cantitate ceara de dat la schimb
+                <input value="0.000 kg" readonly data-processing-exchange>
+            </label>
+            <label>
+                Cost procesare
+                <input value="0.00 lei" readonly data-processing-cost>
             </label>
             <button class="primary" type="submit">Creeaza lot</button>
         </div>

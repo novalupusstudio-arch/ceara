@@ -450,6 +450,122 @@ th {
   flex-wrap: wrap;
 }
 
+.status-filter {
+  display: grid;
+  gap: 14px;
+}
+
+.status-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.status-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fbfcfb;
+  color: var(--text);
+  padding: 0 12px;
+}
+
+.status-toggle input {
+  width: auto;
+  min-height: 0;
+  accent-color: var(--accent);
+}
+
+.lot-board td {
+  vertical-align: top;
+}
+
+.status-board-cell {
+  min-width: 170px;
+}
+
+.cell-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.icon-button {
+  width: 34px;
+  min-width: 34px;
+  min-height: 34px;
+  padding: 0;
+  border-radius: 6px;
+  background: #eef2ee;
+  color: var(--accent-strong);
+}
+
+.icon-button svg {
+  width: 17px;
+  height: 17px;
+  display: block;
+}
+
+.icon-button.primary-icon {
+  background: var(--accent);
+  color: #fff;
+}
+
+.icon-button.danger-icon {
+  background: #f4e5e2;
+  color: var(--danger);
+}
+
+.status-board-cell .status {
+  justify-content: flex-start;
+}
+
+.factory-topbar {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.factory-processor {
+  max-width: 320px;
+}
+
+.factory-form {
+  display: grid;
+  gap: 16px;
+}
+
+.factory-totals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.factory-qty input {
+  text-align: right;
+}
+
+.row-cost,
+.row-foundation {
+  display: inline-flex;
+  min-width: 96px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .empty,
 .muted {
   color: var(--muted);

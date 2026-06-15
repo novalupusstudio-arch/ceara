@@ -1,24 +1,18 @@
-# Flow Procesare Ceară
+# Flow Processing Wax
 
-## Statusuri
-- In Validare
-- Acceptat
-- Predat Fabricii
-- Respins
-- Returnat
+## Statuses
 
-## Flux client cunoscut
-1. PV Custodie
-2. Acceptare
-3. Factură
-4. Bon fiscal
-5. PV Predare Faguri
-6. Status Acceptat
+- `In Validare`
+- `Acceptat`
+- `Predat Fabricii`
+- `Respins`
+- `Returnat`
 
-## Flux client necunoscut
-1. PV Custodie
-2. Status In Validare
-3. Predare lot la fabrică
-4. Acceptat sau Respins
-5. Dacă acceptat -> Factură + PV Predare
-6. Dacă respins -> PV Returnare
+## Current Flow
+
+1. Create a processing lot.
+2. The lot starts in `In Validare`.
+3. Validate or reject it on the lot board.
+4. `Acceptat` is the end state on the board.
+5. Send wax to the factory in batch from the dedicated delivery page.
+6. Generate mock documents for each stage.

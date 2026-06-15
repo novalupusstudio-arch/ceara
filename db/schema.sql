@@ -75,6 +75,7 @@ CREATE TABLE IF NOT EXISTS processing_lots (
     customer_id INT NOT NULL,
     status ENUM('In Validare', 'Acceptat', 'Predat Fabricii', 'Respins', 'Returnat') NOT NULL,
     gross_g INT NOT NULL,
+    factory_sent_g INT NOT NULL DEFAULT 0,
     processing_price_cents INT NOT NULL DEFAULT 0,
     shrinkage_pct DECIMAL(6,3) NOT NULL DEFAULT 0,
     foundation_g INT NOT NULL,
@@ -86,6 +87,41 @@ CREATE TABLE IF NOT EXISTS processing_lots (
     FOREIGN KEY (store_id) REFERENCES stores(id),
     FOREIGN KEY (processor_id) REFERENCES processors(id),
     FOREIGN KEY (created_by) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS processing_lot_status_events (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    lot_id INT NOT NULL,
+    status ENUM('In Validare', 'Acceptat', 'Predat Fabricii', 'Respins', 'Returnat') NOT NULL,
+    created_by INT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (lot_id) REFERENCES processing_lots(id) ON DELETE CASCADE,
+    FOREIGN KEY (created_by) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS factory_batches (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    batch_number VARCHAR(40) NOT NULL UNIQUE,
+    processor_id INT NOT NULL,
+    store_id INT NOT NULL,
+    wax_g INT NOT NULL,
+    foundation_g INT NOT NULL,
+    processing_cost_cents INT NOT NULL DEFAULT 0,
+    created_by INT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (processor_id) REFERENCES processors(id),
+    FOREIGN KEY (store_id) REFERENCES stores(id),
+    FOREIGN KEY (created_by) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS factory_batch_items (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    batch_id INT NOT NULL,
+    processing_lot_id INT NOT NULL,
+    wax_g INT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (batch_id) REFERENCES factory_batches(id) ON DELETE CASCADE,
+    FOREIGN KEY (processing_lot_id) REFERENCES processing_lots(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS purchase_lots (
