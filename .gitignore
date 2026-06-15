@@ -1,0 +1,41 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs / temp
+*.log
+logs/
+tmp/
+temp/
+.cache/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+config/local.php
+config/secrets.php
+
+# Dependencies / build output
+node_modules/
+vendor/
+dist/
+build/
+coverage/
+
+# PHP / Composer
+composer.phar
+composer.lock
+
+# XAMPP / local runtime artifacts
+*.sql.gz
+*.sqlite
+*.sqlite3
+uploads/
+storage/
+
