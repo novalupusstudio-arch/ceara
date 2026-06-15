@@ -42,6 +42,13 @@ Operators can:
 - generate operational documents
 - access only assigned stores
 
+### Initial Access
+
+- The initial seeded user is an admin account.
+- Initial credentials: `admin` / `admin`.
+- After first login, the admin can create other users and change passwords.
+- Password-change enforcement after first login is desirable, but can be handled after the basic MVP login works.
+
 ## Recommended Permissions
 
 - `USER_CREATE`
@@ -90,6 +97,13 @@ Operators can:
 - token
 - invoice series
 - document series
+
+### Document Series
+
+- Document numbering starts simple for MVP: `1`, `2`, `3`, increasing per document type.
+- Every document has a store/gestiune-specific series.
+- Series are configured in settings per store/gestiune.
+- Exact numbering rules can be refined after the first usable flow is implemented.
 
 ## Processing Flow
 
@@ -163,6 +177,13 @@ Operators can:
 - Aviz procesator
 - NIR produse finite
 
+### Fiscal Output
+
+- Billing starts as a mock integration.
+- In production, invoices will be sent to a third-party billing API.
+- Fiscal receipts will follow a similar integration pattern, but output text files for the cash register.
+- The MVP should isolate fiscal generation behind an internal service/interface so mock and real integrations can be swapped later.
+
 ## Inventory Model
 
 ### Custody
@@ -176,6 +197,12 @@ Operators can:
 - merchandise wax foundations
 
 Custody stock and company-owned stock must never be mixed.
+
+### Quantity Precision
+
+- Inventory quantities are stored in grams.
+- UI presents quantities in kilograms with three decimals, for example `1.234 kg`.
+- Calculations should use integer grams to avoid decimal drift.
 
 ## Dashboard
 
@@ -229,6 +256,15 @@ Audit records are append-only and must not be deleted.
 - Email
 - QR Codes
 - Mobile app
+
+## Technical Stack
+
+- Backend: plain PHP.
+- Database: MySQL.
+- Local runtime: XAMPP.
+- Frontend: server-rendered PHP pages with focused HTML/CSS/JavaScript unless a later requirement justifies extra tooling.
+- Development source remains in `E:\NovaLupus\ceara`.
+- XAMPP test copy remains in `E:\XAMP\htdocs\ceara`.
 
 ## Database Direction
 
@@ -296,9 +332,9 @@ It should also show the KPI listed above.
 
 ## Open Decisions
 
-- Exact stack: PHP-only, PHP + MySQL, or another structure.
-- Authentication model and password reset flow.
-- Document numbering rules.
-- Fiscal integration timing: mock first or real integration from MVP.
+- Exact database schema and migrations.
+- Password reset flow after admin-created users exist.
+- Whether to enforce password change on first login.
+- Exact document numbering rules beyond simple increasing numbers per store/gestiune series.
 - Whether unknown customer validation requires processor feedback before accept/reject.
 - Whether inventory quantities need batch/lot-level costing.
