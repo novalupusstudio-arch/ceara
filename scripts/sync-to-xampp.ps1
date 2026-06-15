@@ -26,19 +26,23 @@ $excludedFiles = @(
 
 New-Item -ItemType Directory -Force -Path $target | Out-Null
 
-Get-ChildItem -Path $source -Force | ForEach-Object {
-    $item = $_
+Get-ChildItem -Path $source -Force -Recurse -File | ForEach-Object {
+    $file = $_
+    $relativePath = $file.FullName.Substring($source.Path.Length).TrimStart("\", "/")
+    $parts = $relativePath -split "[\\/]"
 
-    if ($item.PSIsContainer -and $excludedDirectories -contains $item.Name) {
+    if ($parts | Where-Object { $excludedDirectories -contains $_ }) {
         return
     }
 
-    if (-not $item.PSIsContainer -and $excludedFiles -contains $item.Name) {
+    if ($excludedFiles -contains $file.Name) {
         return
     }
 
-    $destination = Join-Path $target $item.Name
-    Copy-Item -LiteralPath $item.FullName -Destination $destination -Recurse -Force
+    $destination = Join-Path $target $relativePath
+    $destinationDirectory = Split-Path -Parent $destination
+    New-Item -ItemType Directory -Force -Path $destinationDirectory | Out-Null
+    Copy-Item -LiteralPath $file.FullName -Destination $destination -Force
 }
 
 Write-Host "Synced $source to $target"

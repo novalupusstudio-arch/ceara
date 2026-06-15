@@ -84,11 +84,52 @@ final class Database
                 ->execute(['GEST1', 'Gestiune principala', '']);
         }
 
+        $adminId = (int) $pdo->query("SELECT id FROM users WHERE username = 'admin' ORDER BY id LIMIT 1")->fetchColumn();
+        $firstStoreId = (int) $pdo->query('SELECT id FROM stores ORDER BY id LIMIT 1')->fetchColumn();
+        if ($adminId > 0 && $firstStoreId > 0) {
+            $pdo->prepare('INSERT IGNORE INTO user_stores (user_id, store_id) VALUES (?, ?)')
+                ->execute([$adminId, $firstStoreId]);
+        }
+
         $processorCount = (int) $pdo->query('SELECT COUNT(*) FROM processors')->fetchColumn();
         if ($processorCount === 0) {
             $pdo->prepare(
                 'INSERT INTO processors (name, cui, contact, processing_price_cents, exchange_shrinkage_pct, purchase_shrinkage_pct) VALUES (?, ?, ?, ?, ?, ?)'
             )->execute(['Procesator implicit', '', '', 0, 0, 0]);
+        }
+
+        $permissions = [
+            'USER_CREATE' => 'Creare utilizatori',
+            'USER_EDIT' => 'Editare utilizatori',
+            'USER_RESET_PASSWORD' => 'Resetare parole',
+            'STORE_MANAGE' => 'Administrare gestiuni',
+            'PROCESSOR_MANAGE' => 'Administrare procesatori',
+            'PROCESSING_CREATE' => 'Creare procesare',
+            'PROCESSING_ACCEPT' => 'Acceptare procesare',
+            'PROCESSING_REJECT' => 'Respingere procesare',
+            'PURCHASE_CREATE' => 'Creare achizitii',
+            'REPORT_VIEW' => 'Vizualizare rapoarte',
+            'AUDIT_VIEW' => 'Vizualizare audit',
+        ];
+
+        foreach ($permissions as $code => $label) {
+            $pdo->prepare('INSERT IGNORE INTO permissions (code, label) VALUES (?, ?)')
+                ->execute([$code, $label]);
+        }
+
+        foreach (array_keys($permissions) as $code) {
+            $pdo->prepare('INSERT IGNORE INTO role_permissions (role_name, permission_code, allowed) VALUES (?, ?, ?)')
+                ->execute(['admin', $code, 1]);
+        }
+
+        $operatorDefaults = [
+            'PROCESSING_CREATE',
+            'PURCHASE_CREATE',
+            'REPORT_VIEW',
+        ];
+        foreach (array_keys($permissions) as $code) {
+            $pdo->prepare('INSERT IGNORE INTO role_permissions (role_name, permission_code, allowed) VALUES (?, ?, ?)')
+                ->execute(['operator', $code, in_array($code, $operatorDefaults, true) ? 1 : 0]);
         }
 
         $seriesCount = (int) $pdo->query('SELECT COUNT(*) FROM document_series')->fetchColumn();
@@ -102,4 +143,3 @@ final class Database
         }
     }
 }
-

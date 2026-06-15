@@ -17,6 +17,12 @@ function current_user(): ?array
     return $_SESSION['user'] ?? null;
 }
 
+function is_initial_admin(): bool
+{
+    $user = current_user();
+    return $user && (int) $user['id'] === 1 && $user['role'] === 'admin';
+}
+
 function require_login(): void
 {
     if (!current_user()) {
@@ -61,4 +67,3 @@ function post_int(string $key, int $default = 0): int
 {
     return (int) ($_POST[$key] ?? $default);
 }
-

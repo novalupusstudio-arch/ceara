@@ -199,6 +199,31 @@ label select {
   font-size: 18px;
 }
 
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 18px;
+}
+
+.tabs a {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #eef2ee;
+  color: var(--accent-strong);
+  padding: 0 12px;
+  font-weight: 800;
+}
+
+.tabs a.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
 .kpi-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -278,6 +303,18 @@ label select {
   min-height: 0;
 }
 
+.field-title {
+  color: var(--muted);
+  display: block;
+  font-size: 13px;
+  font-weight: 800;
+  margin-bottom: 6px;
+}
+
+.store-checks {
+  align-self: stretch;
+}
+
 .table-wrap {
   overflow-x: auto;
 }
@@ -313,6 +350,28 @@ th {
   font-size: 12px;
   font-weight: 800;
   white-space: nowrap;
+}
+
+.permission-table td:not(:first-child),
+.permission-table th:not(:first-child) {
+  text-align: center;
+}
+
+.matrix-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.matrix-check input {
+  width: 20px;
+  height: 20px;
+  min-height: 20px;
+  accent-color: var(--accent);
+}
+
+.block {
+  display: block;
 }
 
 .actions-cell {
@@ -362,6 +421,26 @@ th {
 .settings-form {
   display: grid;
   gap: 0;
+}
+
+.panel-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+.store-list {
+  display: grid;
+  gap: 12px;
+}
+
+.store-row {
+  display: grid;
+  grid-template-columns: 120px minmax(160px, 1fr) minmax(220px, 1.4fr) auto;
+  gap: 12px;
+  align-items: end;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
 }
 
 .login-page,
@@ -430,7 +509,8 @@ th {
   .flow-grid,
   .two-column,
   .form-grid,
-  .login-shell {
+  .login-shell,
+  .store-row {
     grid-template-columns: 1fr;
   }
 
@@ -442,4 +522,3 @@ th {
     flex-direction: column;
   }
 }
-

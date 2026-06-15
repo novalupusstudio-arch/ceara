@@ -86,6 +86,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect('purchases');
         }
 
+        if ($action === 'change_password') {
+            $app->changeOwnPassword(
+                $user['id'],
+                post_string('current_password'),
+                post_string('new_password'),
+                post_string('confirm_password')
+            );
+            flash('Parola a fost schimbata.');
+            redirect('settings', ['settings_tab' => 'password']);
+        }
+
+        if ($action === 'save_role_permissions') {
+            if (!is_initial_admin()) {
+                throw new RuntimeException('Doar adminul initial poate edita rolurile.');
+            }
+            $app->saveRolePermissions($_POST['permissions'] ?? [], $user['id']);
+            flash('Permisiunile rolurilor au fost salvate.');
+            redirect('settings', ['settings_tab' => 'roles']);
+        }
+
+        if ($action === 'create_user') {
+            if (!is_initial_admin()) {
+                throw new RuntimeException('Doar adminul initial poate crea utilizatori.');
+            }
+            $app->createUser([
+                'username' => post_string('username'),
+                'full_name' => post_string('full_name'),
+                'password' => post_string('password'),
+                'role' => post_string('role'),
+                'active' => isset($_POST['active']),
+                'store_ids' => $_POST['store_ids'] ?? [],
+            ], $user['id']);
+            flash('Utilizatorul a fost creat.');
+            redirect('settings', ['settings_tab' => 'users']);
+        }
+
+        if ($action === 'save_store') {
+            $app->saveStore([
+                'id' => post_int('store_id'),
+                'code' => post_string('store_code'),
+                'name' => post_string('store_name'),
+                'address' => post_string('store_address'),
+            ], $user['id']);
+            flash('Gestiunea a fost salvata.');
+            redirect('settings', ['settings_tab' => 'stores']);
+        }
+
         if ($action === 'save_settings') {
             $app->saveSettings([
                 'store_id' => post_int('store_id'),
@@ -133,4 +180,3 @@ $data = match ($page) {
 };
 
 require __DIR__ . '/views/layout.php';
-

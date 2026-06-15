@@ -2,6 +2,8 @@
 
 final class App
 {
+    private const ROLES = ['admin', 'operator'];
+
     public function __construct(public PDO $pdo)
     {
     }
@@ -264,10 +266,180 @@ final class App
         return [
             'stores' => $this->stores(),
             'processors' => $this->processors(),
+            'permissions' => $this->permissions(),
+            'role_permissions' => $this->rolePermissions(),
+            'users' => $this->users(),
+            'user_stores' => $this->userStores(),
             'series' => $this->pdo->query(
                 'SELECT ds.*, s.name AS store_name FROM document_series ds JOIN stores s ON s.id = ds.store_id ORDER BY s.name, ds.document_type'
             )->fetchAll(),
         ];
+    }
+
+    public function changeOwnPassword(int $userId, string $currentPassword, string $newPassword, string $confirmPassword): void
+    {
+        if ($newPassword === '' || strlen($newPassword) < 4) {
+            throw new RuntimeException('Parola noua trebuie sa aiba minimum 4 caractere.');
+        }
+
+        if ($newPassword !== $confirmPassword) {
+            throw new RuntimeException('Confirmarea parolei nu se potriveste.');
+        }
+
+        $stmt = $this->pdo->prepare('SELECT password_hash FROM users WHERE id = ?');
+        $stmt->execute([$userId]);
+        $hash = $stmt->fetchColumn();
+
+        if (!$hash || !password_verify($currentPassword, (string) $hash)) {
+            throw new RuntimeException('Parola curenta este gresita.');
+        }
+
+        $this->pdo->prepare('UPDATE users SET password_hash = ? WHERE id = ?')
+            ->execute([password_hash($newPassword, PASSWORD_DEFAULT), $userId]);
+        $this->logAudit($userId, 'PASSWORD_CHANGE', 'users', $userId, null, 'changed');
+    }
+
+    public function saveRolePermissions(array $matrix, int $userId): void
+    {
+        $this->pdo->beginTransaction();
+        try {
+            foreach ($this->permissions() as $permission) {
+                foreach (self::ROLES as $role) {
+                    $allowed = isset($matrix[$role][$permission['code']]) ? 1 : 0;
+                    $this->pdo->prepare(
+                        'INSERT INTO role_permissions (role_name, permission_code, allowed)
+                         VALUES (?, ?, ?)
+                         ON DUPLICATE KEY UPDATE allowed = VALUES(allowed)'
+                    )->execute([$role, $permission['code'], $allowed]);
+                }
+            }
+            $this->logAudit($userId, 'ROLE_PERMISSIONS_UPDATE', 'role_permissions', null, null, 'updated');
+            $this->pdo->commit();
+        } catch (Throwable $error) {
+            $this->pdo->rollBack();
+            throw $error;
+        }
+    }
+
+    public function createUser(array $data, int $userId): void
+    {
+        $username = trim($data['username']);
+        $password = (string) $data['password'];
+        $role = in_array($data['role'], self::ROLES, true) ? $data['role'] : 'operator';
+
+        if ($username === '' || $password === '') {
+            throw new RuntimeException('Utilizatorul si parola sunt obligatorii.');
+        }
+
+        $this->pdo->beginTransaction();
+        try {
+            $stmt = $this->pdo->prepare(
+                'INSERT INTO users (username, password_hash, full_name, role, active) VALUES (?, ?, ?, ?, ?)'
+            );
+            $stmt->execute([
+                $username,
+                password_hash($password, PASSWORD_DEFAULT),
+                trim($data['full_name']) ?: $username,
+                $role,
+                isset($data['active']) ? 1 : 0,
+            ]);
+            $newUserId = (int) $this->pdo->lastInsertId();
+
+            foreach (($data['store_ids'] ?? []) as $storeId) {
+                $this->pdo->prepare('INSERT IGNORE INTO user_stores (user_id, store_id) VALUES (?, ?)')
+                    ->execute([$newUserId, (int) $storeId]);
+            }
+
+            $this->logAudit($userId, 'USER_CREATE', 'users', $newUserId, null, $username);
+            $this->pdo->commit();
+        } catch (Throwable $error) {
+            $this->pdo->rollBack();
+            throw $error;
+        }
+    }
+
+    public function saveStore(array $data, int $userId): void
+    {
+        $id = (int) ($data['id'] ?? 0);
+        $code = trim($data['code']);
+        $name = trim($data['name']);
+        $address = trim($data['address']);
+
+        if ($code === '' || $name === '') {
+            throw new RuntimeException('Codul si denumirea gestiunii sunt obligatorii.');
+        }
+
+        $this->pdo->beginTransaction();
+        try {
+            if ($id > 0) {
+                $this->pdo->prepare('UPDATE stores SET code = ?, name = ?, address = ? WHERE id = ?')
+                    ->execute([$code, $name, $address, $id]);
+                $storeId = $id;
+                $operation = 'STORE_UPDATE';
+            } else {
+                $this->pdo->prepare('INSERT INTO stores (code, name, address) VALUES (?, ?, ?)')
+                    ->execute([$code, $name, $address]);
+                $storeId = (int) $this->pdo->lastInsertId();
+                $operation = 'STORE_CREATE';
+
+                foreach (['PV-CUST', 'FACT', 'BON', 'PV-FAG', 'PV-RET', 'AVIZ', 'NIR', 'BORD'] as $type) {
+                    $this->pdo->prepare(
+                        'INSERT IGNORE INTO document_series (store_id, document_type, series, next_number) VALUES (?, ?, ?, 1)'
+                    )->execute([$storeId, $type, $type . '-' . $code]);
+                }
+            }
+
+            $this->logAudit($userId, $operation, 'stores', $storeId, null, $code);
+            $this->pdo->commit();
+        } catch (Throwable $error) {
+            $this->pdo->rollBack();
+            throw $error;
+        }
+    }
+
+    public function permissions(): array
+    {
+        return $this->pdo->query(
+            "SELECT * FROM permissions ORDER BY FIELD(
+                code,
+                'USER_CREATE',
+                'USER_EDIT',
+                'USER_RESET_PASSWORD',
+                'STORE_MANAGE',
+                'PROCESSOR_MANAGE',
+                'PROCESSING_CREATE',
+                'PROCESSING_ACCEPT',
+                'PROCESSING_REJECT',
+                'PURCHASE_CREATE',
+                'REPORT_VIEW',
+                'AUDIT_VIEW'
+            )"
+        )->fetchAll();
+    }
+
+    public function rolePermissions(): array
+    {
+        $rows = $this->pdo->query('SELECT * FROM role_permissions')->fetchAll();
+        $matrix = [];
+        foreach ($rows as $row) {
+            $matrix[$row['role_name']][$row['permission_code']] = (bool) $row['allowed'];
+        }
+        return $matrix;
+    }
+
+    public function users(): array
+    {
+        return $this->pdo->query('SELECT id, username, full_name, role, active, created_at FROM users ORDER BY id')->fetchAll();
+    }
+
+    public function userStores(): array
+    {
+        $rows = $this->pdo->query('SELECT * FROM user_stores')->fetchAll();
+        $map = [];
+        foreach ($rows as $row) {
+            $map[(int) $row['user_id']][] = (int) $row['store_id'];
+        }
+        return $map;
     }
 
     private function upsertCustomer(string $name, string $phone, bool $known): int

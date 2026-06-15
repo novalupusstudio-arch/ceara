@@ -16,6 +16,27 @@ CREATE TABLE IF NOT EXISTS stores (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS permissions (
+    code VARCHAR(80) PRIMARY KEY,
+    label VARCHAR(160) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS role_permissions (
+    role_name ENUM('admin', 'operator') NOT NULL,
+    permission_code VARCHAR(80) NOT NULL,
+    allowed TINYINT(1) NOT NULL DEFAULT 0,
+    PRIMARY KEY (role_name, permission_code),
+    FOREIGN KEY (permission_code) REFERENCES permissions(code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS user_stores (
+    user_id INT NOT NULL,
+    store_id INT NOT NULL,
+    PRIMARY KEY (user_id, store_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS processors (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(160) NOT NULL,
@@ -127,4 +148,3 @@ CREATE TABLE IF NOT EXISTS audit_log (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
