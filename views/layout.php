@@ -39,7 +39,10 @@
             <div class="alert <?= h($message['type']) ?>"><?= h($message['message']) ?></div>
         <?php endif; ?>
         <?php require __DIR__ . '/pages/' . $page . '.php'; ?>
+        <footer class="app-footer">
+            <span><?= h($config['app_name']) ?></span>
+            <span>v<?= h($config['app_version']) ?></span>
+        </footer>
     </main>
 </body>
 </html>
-

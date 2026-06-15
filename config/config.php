@@ -2,6 +2,7 @@
 
 return [
     'app_name' => 'Ceara',
+    'app_version' => '1.0.001',
     'db' => [
         'host' => getenv('CEARA_DB_HOST') ?: '127.0.0.1',
         'port' => getenv('CEARA_DB_PORT') ?: '3306',
@@ -11,4 +12,3 @@ return [
         'charset' => 'utf8mb4',
     ],
 ];
-

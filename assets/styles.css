@@ -156,6 +156,8 @@ label select {
   margin-left: 250px;
   padding: 28px;
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 .page-header {
@@ -441,6 +443,17 @@ th {
   align-items: end;
   border-bottom: 1px solid var(--line);
   padding-bottom: 12px;
+}
+
+.app-footer {
+  margin-top: auto;
+  padding-top: 22px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .login-page,
