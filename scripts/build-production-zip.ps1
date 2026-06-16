@@ -16,7 +16,6 @@ if (-not (Test-Path -LiteralPath $localConfigPath)) {
 New-Item -ItemType Directory -Force -Path $outputPath | Out-Null
 
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
-$stagePath = Join-Path ([System.IO.Path]::GetTempPath()) "ceara-production-$stamp"
 $zipPath = Join-Path $outputPath "ceara-production-$stamp.zip"
 
 $excludeDirs = @(
@@ -65,34 +64,38 @@ function Test-IsExcluded {
 }
 
 try {
-    New-Item -ItemType Directory -Force -Path $stagePath | Out-Null
-
-    Get-ChildItem -LiteralPath $repoRoot -Force -Recurse | ForEach-Object {
-        $relative = $_.FullName.Substring($repoRoot.Length).TrimStart("\")
-        if (Test-IsExcluded -RelativePath $relative -IsDirectory $_.PSIsContainer) {
-            return
-        }
-
-        $destination = Join-Path $stagePath $relative
-        if ($_.PSIsContainer) {
-            New-Item -ItemType Directory -Force -Path $destination | Out-Null
-            return
-        }
-
-        $destinationDir = Split-Path -Parent $destination
-        New-Item -ItemType Directory -Force -Path $destinationDir | Out-Null
-        Copy-Item -LiteralPath $_.FullName -Destination $destination -Force
-    }
-
-    Copy-Item -LiteralPath $localConfigPath -Destination (Join-Path $stagePath "config\local.php") -Force
+    Add-Type -AssemblyName System.IO.Compression
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
 
     if (Test-Path -LiteralPath $zipPath) {
         Remove-Item -LiteralPath $zipPath -Force
     }
-    Compress-Archive -Path (Join-Path $stagePath "*") -DestinationPath $zipPath -Force
-    Write-Host "Pachet productie creat: $zipPath"
-} finally {
-    if (Test-Path -LiteralPath $stagePath) {
-        Remove-Item -LiteralPath $stagePath -Recurse -Force
+
+    $zip = [System.IO.Compression.ZipFile]::Open($zipPath, [System.IO.Compression.ZipArchiveMode]::Create)
+    try {
+        Get-ChildItem -LiteralPath $repoRoot -Force -Recurse | ForEach-Object {
+            if ($_.PSIsContainer) {
+                return
+            }
+
+            $relative = $_.FullName.Substring($repoRoot.Length).TrimStart("\")
+            if (Test-IsExcluded -RelativePath $relative -IsDirectory $false) {
+                return
+            }
+
+            $entryName = $relative.Replace("\", "/")
+            [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $_.FullName, $entryName) | Out-Null
+        }
+
+        [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $localConfigPath, "config/local.php") | Out-Null
+    } finally {
+        $zip.Dispose()
     }
+
+    Write-Host "Pachet productie creat: $zipPath"
+} catch {
+    if (Test-Path -LiteralPath $zipPath) {
+        Remove-Item -LiteralPath $zipPath -Force
+    }
+    throw
 }
