@@ -713,6 +713,44 @@ th {
   gap: 0;
 }
 
+.document-template-form {
+  display: grid;
+  gap: 18px;
+}
+
+.document-template-editor {
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 12px;
+  padding-bottom: 18px;
+}
+
+.document-template-editor h3 {
+  margin: 4px 0;
+}
+
+.template-variable-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.template-variable-list code {
+  background: #eef1ed;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 12px;
+  padding: 5px 7px;
+}
+
+.html-template-editor {
+  font-family: Consolas, "Courier New", monospace;
+  min-height: 520px;
+  resize: vertical;
+  white-space: pre;
+}
+
 .panel-actions {
   display: flex;
   justify-content: flex-end;

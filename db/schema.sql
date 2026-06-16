@@ -213,6 +213,20 @@ CREATE TABLE IF NOT EXISTS documents (
     FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS document_templates (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    code VARCHAR(80) NOT NULL UNIQUE,
+    name VARCHAR(160) NOT NULL,
+    description VARCHAR(255) NOT NULL DEFAULT '',
+    body_html MEDIUMTEXT NOT NULL,
+    variables_json TEXT NOT NULL,
+    active TINYINT(1) NOT NULL DEFAULT 1,
+    updated_by INT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NULL,
+    FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS inventory_transactions (
     id INT AUTO_INCREMENT PRIMARY KEY,
     movement_type VARCHAR(80) NOT NULL,

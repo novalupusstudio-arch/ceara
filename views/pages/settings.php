@@ -4,10 +4,14 @@ $canManageSecurity = is_initial_admin();
 $currentRole = current_user()['role'];
 $canManageStores = (bool) ($rolePermissions[$currentRole]['STORE_MANAGE'] ?? false);
 $canManageProcessors = (bool) ($rolePermissions[$currentRole]['PROCESSOR_MANAGE'] ?? false);
+$canManageDocumentTemplates = (bool) ($rolePermissions[$currentRole]['DOCUMENT_TEMPLATE_MANAGE'] ?? false);
 $availableTabs = ['password' => 'Schimba parola'];
 if ($canManageSecurity) {
     $availableTabs['roles'] = 'Roluri si drepturi';
     $availableTabs['users'] = 'Creare useri';
+}
+if ($canManageDocumentTemplates) {
+    $availableTabs['document_templates'] = 'Template documente';
 }
 if ($canManageStores) {
     $availableTabs['stores'] = 'Gestiuni';
@@ -100,6 +104,40 @@ foreach ($data['stores'] as $store) {
             </div>
             <div class="panel-actions">
                 <button class="primary" type="submit">Salveaza drepturile</button>
+            </div>
+        </form>
+    </section>
+<?php endif; ?>
+
+<?php if ($activeTab === 'document_templates' && $canManageDocumentTemplates): ?>
+    <section class="panel">
+        <h2>Template documente</h2>
+        <form method="post" class="document-template-form">
+            <input type="hidden" name="action" value="save_document_templates">
+            <?php foreach ($data['document_templates'] as $template): ?>
+                <article class="document-template-editor">
+                    <header>
+                        <div>
+                            <span class="eyebrow"><?= h($template['code']) ?></span>
+                            <h3><?= h($template['name']) ?></h3>
+                            <?php if ($template['description'] !== ''): ?>
+                                <p class="muted"><?= h($template['description']) ?></p>
+                            <?php endif; ?>
+                        </div>
+                    </header>
+                    <div class="template-variable-list" aria-label="Variabile disponibile">
+                        <?php foreach ($template['variables'] as $variable): ?>
+                            <code>[<?= h((string) $variable) ?>]</code>
+                        <?php endforeach; ?>
+                    </div>
+                    <label>
+                        HTML template
+                        <textarea class="html-template-editor" name="templates[<?= h((string) $template['id']) ?>][body_html]" rows="28" spellcheck="false"><?= h($template['body_html']) ?></textarea>
+                    </label>
+                </article>
+            <?php endforeach; ?>
+            <div class="panel-actions">
+                <button class="primary" type="submit">Salveaza template-uri</button>
             </div>
         </form>
     </section>

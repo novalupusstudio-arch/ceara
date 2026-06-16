@@ -246,6 +246,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect('settings', ['settings_tab' => 'processors']);
         }
 
+        if ($action === 'save_document_templates') {
+            if (!$app->roleHasPermission($user['role'], 'DOCUMENT_TEMPLATE_MANAGE')) {
+                throw new RuntimeException('Nu ai dreptul sa administrezi template-uri de documente.');
+            }
+            $app->saveDocumentTemplates($_POST['templates'] ?? [], $user['id']);
+            flash('Template-urile de documente au fost salvate.');
+            redirect('settings', ['settings_tab' => 'document_templates']);
+        }
+
         if ($action === 'save_settings') {
             $app->saveSettings([
                 'store_id' => post_int('store_id'),

@@ -775,6 +775,7 @@ final class App
             'role_permissions' => $this->rolePermissions(),
             'users' => $this->users(),
             'user_stores' => $this->userStores(),
+            'document_templates' => $this->documentTemplates(),
             'series' => $this->pdo->query(
                 'SELECT ds.*, s.name AS store_name FROM document_series ds JOIN stores s ON s.id = ds.store_id ORDER BY s.name, ds.document_type'
             )->fetchAll(),
@@ -939,6 +940,42 @@ final class App
         }
     }
 
+    public function saveDocumentTemplates(array $templates, int $userId): void
+    {
+        $existing = $this->documentTemplates();
+        $existingById = [];
+        foreach ($existing as $template) {
+            $existingById[(int) $template['id']] = $template;
+        }
+
+        $this->pdo->beginTransaction();
+        try {
+            foreach ($templates as $id => $templateData) {
+                $templateId = (int) $id;
+                if (!isset($existingById[$templateId])) {
+                    continue;
+                }
+
+                $bodyHtml = trim((string) ($templateData['body_html'] ?? ''));
+                if ($bodyHtml === '') {
+                    throw new RuntimeException('Template-ul "' . $existingById[$templateId]['name'] . '" nu poate fi gol.');
+                }
+
+                $this->pdo->prepare(
+                    'UPDATE document_templates
+                     SET body_html = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
+                     WHERE id = ?'
+                )->execute([$bodyHtml, $userId, $templateId]);
+            }
+
+            $this->logAudit($userId, 'DOCUMENT_TEMPLATES_UPDATE', 'document_templates', null, null, 'updated');
+            $this->pdo->commit();
+        } catch (Throwable $error) {
+            $this->pdo->rollBack();
+            throw $error;
+        }
+    }
+
     public function roleHasPermission(string $role, string $permission): bool
     {
         $stmt = $this->pdo->prepare(
@@ -958,6 +995,7 @@ final class App
                 'USER_RESET_PASSWORD',
                 'STORE_MANAGE',
                 'PROCESSOR_MANAGE',
+                'DOCUMENT_TEMPLATE_MANAGE',
                 'PROCESSING_CREATE',
                 'PROCESSING_ACCEPT',
                 'PROCESSING_REJECT',
@@ -976,6 +1014,17 @@ final class App
             $matrix[$row['role_name']][$row['permission_code']] = (bool) $row['allowed'];
         }
         return $matrix;
+    }
+
+    public function documentTemplates(): array
+    {
+        $rows = $this->pdo->query('SELECT * FROM document_templates ORDER BY id')->fetchAll();
+        foreach ($rows as &$row) {
+            $variables = json_decode((string) $row['variables_json'], true);
+            $row['variables'] = is_array($variables) ? $variables : [];
+        }
+        unset($row);
+        return $rows;
     }
 
     public function users(): array
