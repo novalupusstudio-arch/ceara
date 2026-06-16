@@ -17,7 +17,6 @@ $excludedDirectories = @(
     ".idea",
     ".vscode",
     "node_modules",
-    "vendor",
     "dist",
     "build",
     "coverage",

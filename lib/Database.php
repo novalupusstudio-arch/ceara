@@ -199,6 +199,7 @@ final class Database
             'lot_id' => 'ALTER TABLE documents ADD lot_id INT NULL AFTER store_id',
             'movement_id' => 'ALTER TABLE documents ADD movement_id INT NULL AFTER lot_id',
             'factory_batch_id' => 'ALTER TABLE documents ADD factory_batch_id INT NULL AFTER movement_id',
+            'file_path' => 'ALTER TABLE documents ADD file_path VARCHAR(255) NULL AFTER status',
             'created_by' => 'ALTER TABLE documents ADD created_by INT NULL AFTER notes',
             'printed_at' => 'ALTER TABLE documents ADD printed_at TIMESTAMP NULL AFTER created_by',
         ];
@@ -510,9 +511,6 @@ final class Database
   </tr>
 </table>
 
-<p style="font-size:10px; margin-top:30px;">
-  Document generat din aplicatia [app_name] la data [generated_at]. Cod document: [document_number]. Lot: [lot_number].
-</p>
 HTML,
             ],
         ];

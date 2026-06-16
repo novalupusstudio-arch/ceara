@@ -29,7 +29,6 @@ $excludeDirs = @(
     "temp",
     ".cache",
     "node_modules",
-    "vendor",
     "dist",
     "build",
     "coverage",

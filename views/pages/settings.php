@@ -124,6 +124,7 @@ foreach ($data['stores'] as $store) {
                                 <p class="muted"><?= h($template['description']) ?></p>
                             <?php endif; ?>
                         </div>
+                        <a class="secondary compact" href="index.php?page=document_template_preview&template_id=<?= h((string) $template['id']) ?>" target="_blank" rel="noopener">Preview</a>
                     </header>
                     <div class="template-variable-list" aria-label="Variabile disponibile">
                         <?php foreach ($template['variables'] as $variable): ?>

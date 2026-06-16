@@ -9,6 +9,11 @@ require __DIR__ . '/lib/Database.php';
 require __DIR__ . '/lib/Auth.php';
 require __DIR__ . '/lib/App.php';
 
+$autoload = __DIR__ . '/vendor/autoload.php';
+if (is_file($autoload)) {
+    require $autoload;
+}
+
 $config = require __DIR__ . '/config/config.php';
 $db = new Database($config);
 
@@ -46,11 +51,40 @@ if ($page === 'document_mock') {
         exit;
     }
 
+    $pdf = $app->documentPdfById((int) $doc['id']);
+    if ($pdf !== null) {
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: inline; filename="' . preg_replace('/[^A-Za-z0-9._-]+/', '_', trim($doc['document_type'] . '-' . $doc['series'] . '-' . $doc['number'])) . '.pdf"');
+        echo $pdf;
+        exit;
+    }
+
     header('Content-Type: text/plain; charset=utf-8');
     echo "Mock document PDF\n";
     echo $doc['document_type'] . ' ' . $doc['series'] . '-' . $doc['number'] . "\n";
     echo 'Status: ' . $doc['status'] . "\n";
     echo 'Generarea PDF va fi definita ulterior.';
+    exit;
+}
+
+if ($page === 'document_template_preview') {
+    require_login();
+    $user = current_user();
+    if (!$app->roleHasPermission($user['role'], 'DOCUMENT_TEMPLATE_MANAGE')) {
+        http_response_code(403);
+        echo 'Nu ai dreptul sa previzualizezi template-uri de documente.';
+        exit;
+    }
+
+    $html = $app->documentPreviewByTemplateId((int) ($_GET['template_id'] ?? 0));
+    if ($html === null) {
+        http_response_code(404);
+        echo 'Template-ul nu exista.';
+        exit;
+    }
+
+    header('Content-Type: text/html; charset=utf-8');
+    echo $html;
     exit;
 }
 
@@ -119,10 +153,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($action === 'processing_document') {
-            $app->ensureProcessingDocument(post_int('lot_id'), post_string('document_type'), $user['id'], post_int('movement_id'));
-            flash('Documentul mock a fost generat.');
-            $redirectPage = post_int('movement_id') > 0 ? 'lot_detail' : 'lots';
-            redirect($redirectPage, $redirectPage === 'lot_detail' ? ['lot_id' => post_int('lot_id')] : []);
+            $documentId = $app->ensureProcessingDocument(post_int('lot_id'), post_string('document_type'), $user['id'], post_int('movement_id'));
+            redirect('document_mock', ['document_id' => $documentId]);
         }
 
         if ($action === 'processing_exchange') {

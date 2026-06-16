@@ -26,14 +26,12 @@ deploy/output/
 
 # Dependencies / build output
 node_modules/
-vendor/
 dist/
 build/
 coverage/
 
 # PHP / Composer
 composer.phar
-composer.lock
 
 # XAMPP / local runtime artifacts
 *.sql.gz

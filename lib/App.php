@@ -207,6 +207,48 @@ final class App
         return $this->find('documents', $documentId);
     }
 
+    public function documentPreviewByTemplateId(int $templateId): ?string
+    {
+        $template = $this->find('document_templates', $templateId);
+        if (!$template) {
+            return null;
+        }
+
+        return $this->wrapDocumentHtml($this->renderTemplate((string) $template['body_html'], $this->sampleTemplateVariables()));
+    }
+
+    public function documentPdfById(int $documentId): ?string
+    {
+        $doc = $this->documentById($documentId);
+        if (!$doc) {
+            return null;
+        }
+
+        $filePath = (string) ($doc['file_path'] ?? '');
+        if ($filePath === '' || strtolower(pathinfo($filePath, PATHINFO_EXTENSION)) !== 'pdf') {
+            $this->renderDocumentFile($documentId);
+            $doc = $this->documentById($documentId);
+            $filePath = (string) ($doc['file_path'] ?? '');
+            if ($filePath === '' || strtolower(pathinfo($filePath, PATHINFO_EXTENSION)) !== 'pdf') {
+                return null;
+            }
+        }
+
+        $absolutePath = $this->storagePath($filePath);
+        if (!is_file($absolutePath)) {
+            $this->renderDocumentFile($documentId);
+            $doc = $this->documentById($documentId);
+            $filePath = (string) ($doc['file_path'] ?? '');
+            $absolutePath = $filePath === '' ? '' : $this->storagePath($filePath);
+            if ($absolutePath === '' || !is_file($absolutePath)) {
+                return null;
+            }
+        }
+
+        $pdf = file_get_contents($absolutePath);
+        return $pdf === false ? null : $pdf;
+    }
+
     public function processingRegisterData(int $userId): array
     {
         $store = $this->userPrimaryStore($userId);
@@ -625,7 +667,7 @@ final class App
         }
     }
 
-    public function ensureProcessingDocument(int $lotId, string $documentType, int $userId, int $movementId = 0): void
+    public function ensureProcessingDocument(int $lotId, string $documentType, int $userId, int $movementId = 0): int
     {
         $lot = $this->find('processing_lots', $lotId);
         if (!$lot) {
@@ -635,22 +677,27 @@ final class App
         $referenceType = $movementId > 0 ? 'processing_lot_movement' : 'processing_lot';
         $referenceId = $movementId > 0 ? $movementId : $lotId;
         $stmt = $this->pdo->prepare(
-            'SELECT id FROM documents WHERE reference_type = ? AND reference_id = ? AND document_type = ? LIMIT 1'
+            'SELECT id, file_path FROM documents WHERE reference_type = ? AND reference_id = ? AND document_type = ? LIMIT 1'
         );
         $stmt->execute([$referenceType, $referenceId, $documentType]);
-        if ($stmt->fetchColumn()) {
-            return;
+        $existingDocument = $stmt->fetch();
+        if ($existingDocument) {
+            if (empty($existingDocument['file_path'])) {
+                $this->renderDocumentFile((int) $existingDocument['id']);
+            }
+            return (int) $existingDocument['id'];
         }
 
         $this->pdo->beginTransaction();
         try {
-            $this->document($documentType, $referenceType, $referenceId, (int) $lot['store_id'], 'issued', 'Document generat manual', [
+            $documentId = $this->document($documentType, $referenceType, $referenceId, (int) $lot['store_id'], 'issued', 'Document generat manual', [
                 'lot_id' => $lotId,
                 'movement_id' => $movementId > 0 ? $movementId : null,
                 'created_by' => $userId,
             ]);
             $this->logAudit($userId, 'PROCESSING_DOCUMENT', 'documents', $lotId, null, $documentType);
             $this->pdo->commit();
+            return $documentId;
         } catch (Throwable $error) {
             $this->pdo->rollBack();
             throw $error;
@@ -1137,7 +1184,7 @@ final class App
         return $prefix . '-' . date('Ymd') . '-' . strtoupper(substr(bin2hex(random_bytes(3)), 0, 6));
     }
 
-    private function document(string $type, string $referenceType, int $referenceId, int $storeId, string $status, string $notes, array $links = []): void
+    private function document(string $type, string $referenceType, int $referenceId, int $storeId, string $status, string $notes, array $links = []): int
     {
         $stmt = $this->pdo->prepare(
             'SELECT * FROM document_series WHERE store_id = ? AND document_type = ? FOR UPDATE'
@@ -1171,9 +1218,210 @@ final class App
             $notes,
             $links['created_by'] ?? null,
         ]);
+        $documentId = (int) $this->pdo->lastInsertId();
 
         $this->pdo->prepare('UPDATE document_series SET next_number = next_number + 1 WHERE id = ?')
             ->execute([$series['id']]);
+        $this->renderDocumentFile($documentId);
+        return $documentId;
+    }
+
+    private function renderDocumentFile(int $documentId): void
+    {
+        $doc = $this->documentById($documentId);
+        if (!$doc) {
+            return;
+        }
+
+        $template = $this->documentTemplateByCode((string) $doc['document_type']);
+        if (!$template) {
+            return;
+        }
+
+        $store = $this->find('stores', (int) $doc['store_id']);
+        if (!$store) {
+            return;
+        }
+
+        $oldRelativePath = (string) ($doc['file_path'] ?? '');
+        $html = $this->wrapDocumentHtml($this->renderTemplate(
+            (string) $template['body_html'],
+            $this->documentVariables($doc, $store)
+        ));
+        $relativePath = $this->documentRelativePath($doc, $store, 'pdf');
+        $absolutePath = $this->storagePath($relativePath);
+        $dir = dirname($absolutePath);
+        if (!is_dir($dir)) {
+            mkdir($dir, 0775, true);
+        }
+
+        file_put_contents($absolutePath, $this->buildPdfFromHtml($html));
+        $this->pdo->prepare('UPDATE documents SET file_path = ? WHERE id = ?')
+            ->execute([$relativePath, $documentId]);
+        $this->removeReplacedHtmlDocument($oldRelativePath, $relativePath);
+    }
+
+    private function removeReplacedHtmlDocument(string $oldRelativePath, string $newRelativePath): void
+    {
+        if ($oldRelativePath === '' || $oldRelativePath === $newRelativePath || strtolower(pathinfo($oldRelativePath, PATHINFO_EXTENSION)) !== 'html') {
+            return;
+        }
+
+        $absolutePath = $this->storagePath($oldRelativePath);
+        if (is_file($absolutePath) && str_starts_with(str_replace('\\', '/', $absolutePath), str_replace('\\', '/', dirname(__DIR__) . '/storage/documents/'))) {
+            unlink($absolutePath);
+        }
+    }
+
+    private function documentTemplateByCode(string $code): ?array
+    {
+        $stmt = $this->pdo->prepare('SELECT * FROM document_templates WHERE code = ? AND active = 1 LIMIT 1');
+        $stmt->execute([$code]);
+        $template = $stmt->fetch();
+        return $template ?: null;
+    }
+
+    private function documentVariables(array $doc, array $store): array
+    {
+        $variables = [
+            'document_number' => $this->formatDocumentLabel($doc),
+            'document_date' => date('Y-m-d', strtotime((string) ($doc['created_at'] ?? 'now'))),
+            'company_name' => '',
+            'company_vat_number' => '',
+            'company_registry_number' => '',
+            'company_address' => '',
+            'store_name' => (string) ($store['name'] ?? ''),
+            'store_address' => (string) ($store['address'] ?? ''),
+            'operator_name' => '',
+            'customer_name' => '',
+            'customer_identifier' => '',
+            'customer_address' => '',
+            'customer_phone' => '',
+            'customer_type' => '',
+            'lot_number' => '',
+            'gross_wax_kg' => '',
+            'package_count' => '',
+            'wax_observations' => '',
+            'app_name' => 'Ceara',
+            'generated_at' => date('Y-m-d H:i'),
+        ];
+
+        if (!empty($doc['created_by'])) {
+            $user = $this->find('users', (int) $doc['created_by']);
+            if ($user) {
+                $variables['operator_name'] = (string) ($user['full_name'] ?: $user['username']);
+            }
+        }
+
+        $lotId = (int) ($doc['lot_id'] ?? 0);
+        if ($lotId <= 0 && (string) $doc['reference_type'] === 'processing_lot') {
+            $lotId = (int) $doc['reference_id'];
+        }
+
+        if ($lotId > 0) {
+            $stmt = $this->pdo->prepare(
+                'SELECT p.*, c.name AS customer_name, c.customer_type, c.phone, c.address, c.cui
+                 FROM processing_lots p
+                 JOIN customers c ON c.id = p.customer_id
+                 WHERE p.id = ?'
+            );
+            $stmt->execute([$lotId]);
+            $lot = $stmt->fetch();
+            if ($lot) {
+                $variables['customer_name'] = (string) $lot['customer_name'];
+                $variables['customer_identifier'] = (string) ($lot['cui'] ?? '');
+                $variables['customer_address'] = (string) ($lot['address'] ?? '');
+                $variables['customer_phone'] = (string) ($lot['phone'] ?? '');
+                $variables['customer_type'] = (string) ($lot['customer_type'] ?? '');
+                $variables['lot_number'] = (string) $lot['lot_number'];
+                $variables['gross_wax_kg'] = grams_to_kg((int) $lot['gross_g']);
+            }
+        }
+
+        if (!empty($doc['movement_id'])) {
+            $movement = $this->find('processing_lot_movements', (int) $doc['movement_id']);
+            if ($movement) {
+                $variables['wax_observations'] = nl2br(h((string) ($movement['notes'] ?? '')));
+            }
+        }
+
+        return $variables;
+    }
+
+    private function sampleTemplateVariables(): array
+    {
+        return [
+            'document_number' => 'PV-CUST-GEST1-1',
+            'document_date' => date('Y-m-d'),
+            'company_name' => 'Stuparul',
+            'company_vat_number' => 'RO00000000',
+            'company_registry_number' => 'J00/000/2026',
+            'company_address' => 'Adresa societate',
+            'store_name' => 'Gestiune principala',
+            'store_address' => 'Adresa gestiune',
+            'operator_name' => 'Administrator',
+            'customer_name' => 'Client Exemplu',
+            'customer_identifier' => 'CNP/CUI exemplu',
+            'customer_address' => 'Localitate exemplu',
+            'customer_phone' => '0700000000',
+            'customer_type' => 'PF',
+            'lot_number' => 'PROC-20260616-ABC123',
+            'gross_wax_kg' => '10.000',
+            'package_count' => '1',
+            'wax_observations' => 'Ceara bruta receptionata pentru procesare.',
+            'app_name' => 'Ceara',
+            'generated_at' => date('Y-m-d H:i'),
+        ];
+    }
+
+    private function renderTemplate(string $html, array $variables): string
+    {
+        $replace = [];
+        foreach ($variables as $key => $value) {
+            $replace['[' . $key . ']'] = (string) $value;
+        }
+        return strtr($html, $replace);
+    }
+
+    private function wrapDocumentHtml(string $body): string
+    {
+        return '<!doctype html><html lang="ro"><head><meta charset="utf-8"><title>Document</title></head><body>' . $body . '</body></html>';
+    }
+
+    private function buildPdfFromHtml(string $html): string
+    {
+        if (!class_exists(\Dompdf\Dompdf::class)) {
+            throw new RuntimeException('Dompdf nu este instalat. Ruleaza composer install.');
+        }
+
+        $options = new \Dompdf\Options();
+        $options->set('isRemoteEnabled', false);
+        $options->set('defaultFont', 'DejaVu Sans');
+
+        $dompdf = new \Dompdf\Dompdf($options);
+        $dompdf->loadHtml($html, 'UTF-8');
+        $dompdf->setPaper('A4', 'portrait');
+        $dompdf->render();
+
+        return $dompdf->output();
+    }
+
+    private function documentRelativePath(array $doc, array $store, string $extension): string
+    {
+        $storeCode = $this->safePathPart((string) ($store['code'] ?? 'gestiune'));
+        $fileName = $this->safePathPart($this->formatDocumentLabel($doc)) . '.' . $extension;
+        return 'documents/' . $storeCode . '/' . $fileName;
+    }
+
+    private function safePathPart(string $value): string
+    {
+        $safe = preg_replace('/[^A-Za-z0-9._-]+/', '_', trim($value));
+        return trim((string) $safe, '_') ?: 'document';
+    }
+
+    private function storagePath(string $relativePath): string
+    {
+        return dirname(__DIR__) . '/storage/' . ltrim(str_replace('\\', '/', $relativePath), '/');
     }
 
     private function inventory(string $type, int $qty, int $storeId, string $refType, int $refId, string $notes): void

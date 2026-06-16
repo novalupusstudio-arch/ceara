@@ -725,6 +725,13 @@ th {
   padding-bottom: 18px;
 }
 
+.document-template-editor header {
+  align-items: flex-start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
 .document-template-editor h3 {
   margin: 4px 0;
 }
@@ -868,6 +875,10 @@ th {
   }
 
   .page-header {
+    flex-direction: column;
+  }
+
+  .document-template-editor header {
     flex-direction: column;
   }
 }

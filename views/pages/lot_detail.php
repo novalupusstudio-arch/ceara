@@ -19,7 +19,7 @@ $docButton = static function (array $lot, int $movementId, string $type, string 
     $exists = !empty($documents[$key]);
     $buttonLabel = ($exists ? 'Print ' : 'Genereaza ') . $label;
     ?>
-    <form method="post" class="inline-form">
+    <form method="post" class="inline-form" target="_blank">
         <input type="hidden" name="action" value="processing_document">
         <input type="hidden" name="lot_id" value="<?= h((string) $lot['id']) ?>">
         <input type="hidden" name="movement_id" value="<?= h((string) $movementId) ?>">

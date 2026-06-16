@@ -202,6 +202,7 @@ CREATE TABLE IF NOT EXISTS documents (
     reference_type VARCHAR(60) NOT NULL,
     reference_id INT NOT NULL,
     status VARCHAR(40) NOT NULL DEFAULT 'draft',
+    file_path VARCHAR(255) NULL,
     notes TEXT NULL,
     created_by INT NULL,
     printed_at TIMESTAMP NULL,
