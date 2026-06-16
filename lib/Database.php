@@ -211,40 +211,6 @@ final class Database
 
     private function seed(PDO $pdo): void
     {
-        $count = (int) $pdo->query('SELECT COUNT(*) FROM users')->fetchColumn();
-        if ($count === 0) {
-            $stmt = $pdo->prepare(
-                'INSERT INTO users (username, password_hash, full_name, role, active) VALUES (?, ?, ?, ?, 1)'
-            );
-            $stmt->execute(['admin', password_hash('admin', PASSWORD_DEFAULT), 'Administrator', 'admin']);
-        }
-
-        $storeCount = (int) $pdo->query('SELECT COUNT(*) FROM stores')->fetchColumn();
-        if ($storeCount === 0) {
-            $pdo->prepare('INSERT INTO stores (code, name, address) VALUES (?, ?, ?)')
-                ->execute(['GEST1', 'Gestiune principala', '']);
-        }
-
-        $adminId = (int) $pdo->query("SELECT id FROM users WHERE username = 'admin' ORDER BY id LIMIT 1")->fetchColumn();
-        $firstStoreId = (int) $pdo->query('SELECT id FROM stores ORDER BY id LIMIT 1')->fetchColumn();
-        if ($adminId > 0 && $firstStoreId > 0) {
-            $pdo->prepare('INSERT IGNORE INTO user_stores (user_id, store_id) VALUES (?, ?)')
-                ->execute([$adminId, $firstStoreId]);
-        }
-
-        $processorCount = (int) $pdo->query('SELECT COUNT(*) FROM processors')->fetchColumn();
-        if ($processorCount === 0) {
-            $pdo->prepare(
-                'INSERT INTO processors (name, cui, address, contact, processing_price_cents, exchange_shrinkage_pct, purchase_shrinkage_pct) VALUES (?, ?, ?, ?, ?, ?, ?)'
-            )->execute(['Procesator implicit', '', '', '', 0, 0, 0]);
-        }
-
-        $firstProcessorId = (int) $pdo->query('SELECT id FROM processors ORDER BY id LIMIT 1')->fetchColumn();
-        if ($firstProcessorId > 0 && $pdo->query("SHOW COLUMNS FROM stores LIKE 'processor_id'")->fetch()) {
-            $pdo->prepare('UPDATE stores SET processor_id = ? WHERE processor_id IS NULL')
-                ->execute([$firstProcessorId]);
-        }
-
         $permissions = [
             'USER_CREATE' => 'Creare utilizatori',
             'USER_EDIT' => 'Editare utilizatori',
@@ -277,6 +243,44 @@ final class Database
         foreach (array_keys($permissions) as $code) {
             $pdo->prepare('INSERT IGNORE INTO role_permissions (role_name, permission_code, allowed) VALUES (?, ?, ?)')
                 ->execute(['operator', $code, in_array($code, $operatorDefaults, true) ? 1 : 0]);
+        }
+
+        if (!($this->config['seed_defaults'] ?? true)) {
+            return;
+        }
+
+        $count = (int) $pdo->query('SELECT COUNT(*) FROM users')->fetchColumn();
+        if ($count === 0) {
+            $stmt = $pdo->prepare(
+                'INSERT INTO users (username, password_hash, full_name, role, active) VALUES (?, ?, ?, ?, 1)'
+            );
+            $stmt->execute(['admin', password_hash('admin', PASSWORD_DEFAULT), 'Administrator', 'admin']);
+        }
+
+        $storeCount = (int) $pdo->query('SELECT COUNT(*) FROM stores')->fetchColumn();
+        if ($storeCount === 0) {
+            $pdo->prepare('INSERT INTO stores (code, name, address) VALUES (?, ?, ?)')
+                ->execute(['GEST1', 'Gestiune principala', '']);
+        }
+
+        $adminId = (int) $pdo->query("SELECT id FROM users WHERE username = 'admin' ORDER BY id LIMIT 1")->fetchColumn();
+        $firstStoreId = (int) $pdo->query('SELECT id FROM stores ORDER BY id LIMIT 1')->fetchColumn();
+        if ($adminId > 0 && $firstStoreId > 0) {
+            $pdo->prepare('INSERT IGNORE INTO user_stores (user_id, store_id) VALUES (?, ?)')
+                ->execute([$adminId, $firstStoreId]);
+        }
+
+        $processorCount = (int) $pdo->query('SELECT COUNT(*) FROM processors')->fetchColumn();
+        if ($processorCount === 0) {
+            $pdo->prepare(
+                'INSERT INTO processors (name, cui, address, contact, processing_price_cents, exchange_shrinkage_pct, purchase_shrinkage_pct) VALUES (?, ?, ?, ?, ?, ?, ?)'
+            )->execute(['Procesator implicit', '', '', '', 0, 0, 0]);
+        }
+
+        $firstProcessorId = (int) $pdo->query('SELECT id FROM processors ORDER BY id LIMIT 1')->fetchColumn();
+        if ($firstProcessorId > 0 && $pdo->query("SHOW COLUMNS FROM stores LIKE 'processor_id'")->fetch()) {
+            $pdo->prepare('UPDATE stores SET processor_id = ? WHERE processor_id IS NULL')
+                ->execute([$firstProcessorId]);
         }
 
         $seriesCount = (int) $pdo->query('SELECT COUNT(*) FROM document_series')->fetchColumn();

@@ -43,6 +43,11 @@ Default credentials:
 - user: `admin`
 - password: `admin`
 
+## Production Deploy
+
+Production packaging and database initialization are documented in
+`deploy/DEPLOY_PRODUCTION.md`.
+
 ## MVP Scope
 
 - login/logout
