@@ -17,17 +17,31 @@
             </span>
         </a>
         <nav>
-            <?php foreach ([
+            <?php
+            $generalNavigation = [
                 'dashboard' => 'Dashboard',
-                'processing' => 'Procesare ceara',
-                'lots' => 'Loturi ceara',
-                'factory_delivery' => 'Predare fabrica',
-                'purchases' => 'Achizitie ceara',
                 'documents' => 'Documente',
                 'reports' => 'Rapoarte',
                 'settings' => 'Setari',
                 'audit' => 'Audit',
-            ] as $key => $label): ?>
+            ];
+            $processingNavigation = [
+                'processing' => 'Procesare ceara',
+                'lots' => 'Loturi ceara',
+                'factory_delivery' => 'Predare fabrica',
+                'factory_buffer' => 'Buffer fabrica',
+                'processing_register' => 'Registru gestiune',
+            ];
+            $navigation = ($activeFlow ?? '') === 'processing'
+                ? ['dashboard' => 'Dashboard'] + $processingNavigation + [
+                    'documents' => 'Documente',
+                    'reports' => 'Rapoarte',
+                    'settings' => 'Setari',
+                    'audit' => 'Audit',
+                ]
+                : $generalNavigation;
+            ?>
+            <?php foreach ($navigation as $key => $label): ?>
                 <a class="<?= $page === $key ? 'active' : '' ?>" href="index.php?page=<?= h($key) ?>"><?= h($label) ?></a>
             <?php endforeach; ?>
         </nav>

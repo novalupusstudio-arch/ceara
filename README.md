@@ -4,8 +4,8 @@ Web application project workspace.
 
 ## Working Locations
 
-- Source workspace: `E:\NovaLupus\ceara`
-- Local XAMPP test path: `E:\XAMP\htdocs\ceara`
+- Source workspace: local git clone
+- Local XAMPP test path: configured per machine in `config/xampp-target.local.txt`
 - GitHub remote: `https://github.com/novalupusstudio-arch/ceara.git`
 - Main branch: `main`
 
@@ -46,9 +46,11 @@ Default credentials:
 ## MVP Scope
 
 - login/logout
-- dashboard KPI
-- processing lots
-- purchase lots
+- dashboard KPI and flow selector
+- movement-based processing lots
+- factory delivery
+- factory buffer avize
+- processing store register
 - generated mock documents
 - reports
 - settings for store, processor, and document series
@@ -58,4 +60,5 @@ Quantities are stored as integer grams and displayed as kilograms with three dec
 
 ## Project Status
 
-Working MVP for the main processing and factory-delivery flows.
+Working MVP for the processing flow. Purchase is intentionally disabled in the
+navigation and will be rebuilt separately.

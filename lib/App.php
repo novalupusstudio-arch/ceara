@@ -10,7 +10,12 @@ final class App
 
     public function stores(): array
     {
-        return $this->pdo->query('SELECT * FROM stores ORDER BY name')->fetchAll();
+        return $this->pdo->query(
+            'SELECT s.*, p.name AS processor_name
+             FROM stores s
+             LEFT JOIN processors p ON p.id = s.processor_id
+             ORDER BY s.name'
+        )->fetchAll();
     }
 
     public function processors(): array
@@ -21,9 +26,10 @@ final class App
     public function userPrimaryStore(int $userId): ?array
     {
         $stmt = $this->pdo->prepare(
-            'SELECT s.*
+            'SELECT s.*, p.name AS processor_name
              FROM user_stores us
              JOIN stores s ON s.id = us.store_id
+             LEFT JOIN processors p ON p.id = s.processor_id
              WHERE us.user_id = ?
              ORDER BY us.store_id
              LIMIT 1'
@@ -40,13 +46,42 @@ final class App
         return $processor ?: null;
     }
 
+    public function defaultProcessorForUser(int $userId): ?array
+    {
+        $store = $this->userPrimaryStore($userId);
+        $processorId = (int) ($store['processor_id'] ?? 0);
+        if ($processorId > 0) {
+            $processor = $this->find('processors', $processorId);
+            if ($processor) {
+                return $processor;
+            }
+        }
+
+        return $this->defaultProcessor();
+    }
+
     public function dashboard(): array
     {
+        $summaries = $this->processingLotSummaries();
+        $openLots = 0;
+        $recoveryLots = 0;
+        $waxCustody = 0;
+        $foundationOperational = $this->sumInventory('foundation_operational');
+        foreach ($summaries as $summary) {
+            if ($summary['calculated_status'] !== 'Inchis') {
+                $openLots++;
+            }
+            if ($summary['calculated_status'] === 'Recuperare') {
+                $recoveryLots++;
+            }
+            $waxCustody += $summary['wax_custody_g'];
+        }
+
         return [
-            'foundation_operational_g' => $this->sumInventory('foundation_operational'),
-            'wax_custody_g' => $this->sumInventory('wax_custody'),
-            'pending_lots' => $this->countRows('processing_lots', "status = 'In Validare'"),
-            'rejected_lots' => $this->countRows('processing_lots', "status = 'Respins'"),
+            'foundation_operational_g' => $foundationOperational,
+            'wax_custody_g' => $waxCustody,
+            'pending_lots' => $openLots,
+            'rejected_lots' => $recoveryLots,
             'wax_owned_g' => $this->sumInventory('wax_owned'),
             'foundation_merchandise_g' => $this->sumInventory('foundation_merchandise'),
         ];
@@ -80,18 +115,6 @@ final class App
 
         $selectedProcessorId = $selectedProcessor ? (int) $selectedProcessor['id'] : 0;
 
-        $stmt = $this->pdo->prepare(
-            'SELECT p.*, c.name AS customer_name, c.customer_type, s.name AS store_name, pr.name AS processor_name
-             FROM processing_lots p
-             JOIN customers c ON c.id = p.customer_id
-             JOIN stores s ON s.id = p.store_id
-             LEFT JOIN processors pr ON pr.id = p.processor_id
-             WHERE p.processor_id = ? AND p.status IN ("In Validare", "Acceptat")
-             ORDER BY p.id DESC'
-        );
-        $stmt->execute([$selectedProcessorId]);
-        $lots = $stmt->fetchAll();
-
         $rows = [];
         $totals = [
             'wax_g' => 0,
@@ -99,14 +122,20 @@ final class App
             'cost_cents' => 0,
         ];
 
-        foreach ($lots as $lot) {
-            $remaining = max(0, (int) $lot['gross_g'] - (int) $lot['factory_sent_g']);
-            $selected = $remaining > 0 ? $remaining : (int) $lot['gross_g'];
+        foreach ($this->processingLotSummaries() as $summary) {
+            $lot = $summary['lot'];
+            if ((int) $lot['processor_id'] !== $selectedProcessorId || $summary['wax_custody_g'] <= 0) {
+                continue;
+            }
+
+            $remaining = (int) $summary['wax_custody_g'];
+            $selected = $remaining;
             $cost = (int) round(($selected / 1000) * (int) $selectedProcessor['processing_price_cents']);
             $foundation = max(0, (int) round($selected * (1 - (((float) $selectedProcessor['exchange_shrinkage_pct']) / 100))));
 
             $rows[] = [
                 'lot' => $lot,
+                'summary' => $summary,
                 'remaining_g' => $remaining,
                 'selected_g' => $selected,
                 'cost_cents' => $cost,
@@ -128,55 +157,115 @@ final class App
 
     public function processingLotStatuses(): array
     {
-        return ['In Validare', 'Acceptat', 'Predat Fabricii', 'Respins', 'Returnat'];
+        return ['Procesare', 'Recuperare', 'Inchis'];
     }
 
     public function processingLotsBoard(array $filters = []): array
     {
-        $lots = $this->pdo->query(
-            'SELECT p.*, c.name AS customer_name, c.customer_type, s.name AS store_name, pr.name AS processor_name
-             FROM processing_lots p
-             JOIN customers c ON c.id = p.customer_id
-             JOIN stores s ON s.id = p.store_id
-            LEFT JOIN processors pr ON pr.id = p.processor_id
-             ORDER BY p.id DESC'
-        )->fetchAll();
-
         $selectedStatuses = array_values(array_filter(
             array_map('trim', $filters),
             fn ($status) => in_array($status, $this->processingLotStatuses(), true)
         ));
         if (!$selectedStatuses) {
-            $selectedStatuses = ['In Validare', 'Acceptat'];
+            $selectedStatuses = ['Procesare', 'Recuperare'];
         }
 
-        $lotIds = array_map(static fn (array $lot) => (int) $lot['id'], $lots);
-        $timeline = [];
-        if ($lotIds) {
-            $placeholders = implode(',', array_fill(0, count($lotIds), '?'));
-            $stmt = $this->pdo->prepare(
-                "SELECT lot_id, status, created_at
-                 FROM processing_lot_status_events
-                 WHERE lot_id IN ($placeholders)
-                 ORDER BY id ASC"
-            );
-            $stmt->execute($lotIds);
-            foreach ($stmt->fetchAll() as $row) {
-                $timeline[(int) $row['lot_id']][$row['status']] = $row['created_at'];
-            }
+        $summaries = array_values(array_filter(
+            $this->processingLotSummaries(),
+            fn (array $summary) => in_array($summary['calculated_status'], $selectedStatuses, true)
+        ));
+
+        return [
+            'lots' => $summaries,
+            'selected_statuses' => $selectedStatuses,
+            'all_statuses' => $this->processingLotStatuses(),
+        ];
+    }
+
+    public function factoryBufferData(): array
+    {
+        return [
+            'stores' => $this->stores(),
+            'current_stock_g' => $this->sumInventory('foundation_operational'),
+            'adjustments' => $this->pdo->query(
+                'SELECT a.*, s.name AS store_name, u.username,
+                        d.id AS nir_document_id, d.series AS nir_series, d.number AS nir_number, d.document_type AS nir_type
+                 FROM factory_buffer_adjustments a
+                 JOIN stores s ON s.id = a.store_id
+                 JOIN users u ON u.id = a.created_by
+                 LEFT JOIN documents d ON d.reference_type = "factory_buffer_adjustment"
+                    AND d.reference_id = a.id
+                    AND d.document_type = "NIR"
+                 ORDER BY a.id DESC
+                 LIMIT 100'
+            )->fetchAll(),
+        ];
+    }
+
+    public function documentById(int $documentId): ?array
+    {
+        return $this->find('documents', $documentId);
+    }
+
+    public function processingRegisterData(int $userId): array
+    {
+        $store = $this->userPrimaryStore($userId);
+        if (!$store) {
+            throw new RuntimeException('Utilizatorul nu are o gestiune alocata.');
         }
 
-        foreach ($lots as $lot) {
-            $lotId = (int) $lot['id'];
-            $timeline[$lotId]['In Validare'] = $timeline[$lotId]['In Validare'] ?? $lot['created_at'];
-            $timeline[$lotId][$lot['status']] = $timeline[$lotId][$lot['status']] ?? $lot['created_at'];
+        $stmt = $this->pdo->prepare(
+            "SELECT reference_type,
+                    reference_id,
+                    MAX(created_at) AS created_at,
+                    COALESCE(SUM(CASE WHEN movement_type = 'wax_custody' THEN qty_g ELSE 0 END), 0) AS wax_g,
+                    COALESCE(SUM(CASE WHEN movement_type = 'foundation_operational' THEN qty_g ELSE 0 END), 0) AS foundation_g
+             FROM inventory_transactions
+             WHERE store_id = ?
+               AND movement_type IN ('wax_custody', 'foundation_operational')
+               AND reference_type IN ('processing_lot', 'processing_lot_movement', 'factory_batch', 'factory_buffer_adjustment')
+             GROUP BY reference_type, reference_id
+             ORDER BY created_at DESC, reference_id DESC"
+        );
+        $stmt->execute([(int) $store['id']]);
+
+        $rows = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $rows[] = array_merge($row, $this->processingRegisterMeta($row['reference_type'], (int) $row['reference_id']));
         }
 
         return [
-            'lots' => $lots,
-            'timeline' => $timeline,
-            'selected_statuses' => $selectedStatuses,
-            'all_statuses' => $this->processingLotStatuses(),
+            'store' => $store,
+            'wax_total_g' => $this->sumInventoryForStore('wax_custody', (int) $store['id']),
+            'foundation_total_g' => $this->sumInventoryForStore('foundation_operational', (int) $store['id']),
+            'rows' => $rows,
+        ];
+    }
+
+    public function processingLotDetail(int $lotId): array
+    {
+        $summary = $this->processingLotSummary($lotId);
+        if (!$summary) {
+            throw new RuntimeException('Lotul nu exista.');
+        }
+
+        $stmt = $this->pdo->prepare(
+            'SELECT m.*, u.username
+             FROM processing_lot_movements m
+             JOIN users u ON u.id = m.created_by
+             WHERE m.lot_id = ?
+             ORDER BY m.id ASC'
+        );
+        $stmt->execute([$lotId]);
+        $movements = $stmt->fetchAll();
+
+        $documents = $this->documentsForLot($lotId);
+
+        return [
+            'summary' => $summary,
+            'movements' => $movements,
+            'documents' => $documents,
+            'foundation_stock_g' => $this->sumInventory('foundation_operational'),
         ];
     }
 
@@ -245,12 +334,140 @@ final class App
             $lotId = (int) $this->pdo->lastInsertId();
 
             $this->inventory('wax_custody', $gross, (int) $data['store_id'], 'processing_lot', $lotId, 'Ceara client in custodie');
+            $movementId = $this->processingMovement($lotId, 'RECEIVE_WAX_FROM_CLIENT', $gross, 0, 0, trim((string) ($data['notes'] ?? '')), $userId);
             $this->recordProcessingLotStatus($lotId, $status, $userId);
-            $this->document('PV-CUST', 'processing_lot', $lotId, (int) $data['store_id'], 'mock', 'PV predare in custodie');
+            $this->document('PV-CUST', 'processing_lot_movement', $movementId, (int) $data['store_id'], 'issued', 'PV primire ceara in custodie', [
+                'lot_id' => $lotId,
+                'movement_id' => $movementId,
+                'created_by' => $userId,
+            ]);
             $this->logAudit($userId, 'PROCESSING_CREATE', 'processing_lots', $lotId, null, $status);
 
             $this->pdo->commit();
             return $lotId;
+        } catch (Throwable $error) {
+            $this->pdo->rollBack();
+            throw $error;
+        }
+    }
+
+    public function createProcessingExchange(int $lotId, string $waxKg, int $userId): int
+    {
+        $summary = $this->processingLotSummary($lotId);
+        if (!$summary) {
+            throw new RuntimeException('Lotul nu exista.');
+        }
+
+        $wax = kg_to_grams($waxKg);
+        if ($wax <= 0) {
+            throw new RuntimeException('Cantitatea de schimb trebuie sa fie mai mare decat zero.');
+        }
+        if ($wax > $summary['wax_available_for_exchange_g']) {
+            throw new RuntimeException('Cantitatea de schimb depaseste ceara neschimbata din lot.');
+        }
+
+        $foundation = $this->foundationForWax($wax, (float) $summary['lot']['shrinkage_pct']);
+        $stock = $this->sumInventory('foundation_operational');
+        if ($foundation > $stock) {
+            throw new RuntimeException('Stocul operational de faguri este insuficient pentru acest schimb.');
+        }
+
+        $serviceValue = (int) round(($wax / 1000) * (int) $summary['lot']['processing_price_cents']);
+
+        $this->pdo->beginTransaction();
+        try {
+            $movementId = $this->processingMovement($lotId, 'EXCHANGE_WAX_WITH_CLIENT', $wax, $foundation, $serviceValue, '', $userId);
+            $this->inventory('foundation_operational', -$foundation, (int) $summary['lot']['store_id'], 'processing_lot_movement', $movementId, 'Faguri predati client la schimb');
+            $this->logAudit($userId, 'PROCESSING_EXCHANGE', 'processing_lot_movements', $movementId, null, (string) $lotId);
+            $this->pdo->commit();
+            return $movementId;
+        } catch (Throwable $error) {
+            $this->pdo->rollBack();
+            throw $error;
+        }
+    }
+
+    public function createProcessingReturn(int $lotId, string $waxKg, string $notes, int $userId): int
+    {
+        $summary = $this->processingLotSummary($lotId);
+        if (!$summary) {
+            throw new RuntimeException('Lotul nu exista.');
+        }
+
+        $wax = kg_to_grams($waxKg);
+        if ($wax <= 0) {
+            throw new RuntimeException('Cantitatea de retur trebuie sa fie mai mare decat zero.');
+        }
+        if ($wax > $summary['wax_custody_g']) {
+            throw new RuntimeException('Cantitatea de retur depaseste ceara aflata in custodie.');
+        }
+
+        $this->pdo->beginTransaction();
+        try {
+            $movementId = $this->processingMovement($lotId, 'RETURN_WAX_TO_CLIENT', $wax, 0, 0, $notes, $userId);
+            $this->inventory('wax_custody', -$wax, (int) $summary['lot']['store_id'], 'processing_lot_movement', $movementId, 'Ceara returnata client');
+            $this->document('PV-RET', 'processing_lot_movement', $movementId, (int) $summary['lot']['store_id'], 'draft', 'PV retur ceara client', [
+                'lot_id' => $lotId,
+                'movement_id' => $movementId,
+                'created_by' => $userId,
+            ]);
+            $this->logAudit($userId, 'PROCESSING_RETURN', 'processing_lot_movements', $movementId, null, (string) $lotId);
+            $this->pdo->commit();
+            return $movementId;
+        } catch (Throwable $error) {
+            $this->pdo->rollBack();
+            throw $error;
+        }
+    }
+
+    public function createFactoryBufferAdjustment(array $data, int $userId): int
+    {
+        $type = $data['adjustment_type'] === 'minus' ? 'minus' : 'plus';
+        $storeId = (int) ($data['store_id'] ?? 0);
+        $avizNumber = trim((string) ($data['aviz_number'] ?? ''));
+        $qty = kg_to_grams((string) ($data['qty_kg'] ?? '0'));
+        $notes = trim((string) ($data['notes'] ?? ''));
+
+        if (!$this->find('stores', $storeId)) {
+            throw new RuntimeException('Gestiunea selectata nu exista.');
+        }
+        if ($avizNumber === '') {
+            throw new RuntimeException('Numarul avizului este obligatoriu.');
+        }
+        if ($qty <= 0) {
+            throw new RuntimeException('Cantitatea trebuie sa fie mai mare decat zero.');
+        }
+
+        $signedQty = $type === 'plus' ? $qty : -$qty;
+        if ($signedQty < 0 && abs($signedQty) > $this->sumInventory('foundation_operational')) {
+            throw new RuntimeException('Avizul de minus depaseste stocul operational de faguri disponibil.');
+        }
+
+        $this->pdo->beginTransaction();
+        try {
+            $stmt = $this->pdo->prepare(
+                'INSERT INTO factory_buffer_adjustments
+                (adjustment_type, aviz_number, qty_g, store_id, notes, created_by)
+                VALUES (?, ?, ?, ?, ?, ?)'
+            );
+            $stmt->execute([$type, $avizNumber, $qty, $storeId, $notes, $userId]);
+            $adjustmentId = (int) $this->pdo->lastInsertId();
+
+            $this->inventory(
+                'foundation_operational',
+                $signedQty,
+                $storeId,
+                'factory_buffer_adjustment',
+                $adjustmentId,
+                'Aviz buffer fabrica ' . strtoupper($type) . ' ' . $avizNumber
+            );
+            $this->document('NIR', 'factory_buffer_adjustment', $adjustmentId, $storeId, 'issued', 'NIR buffer fabrica pentru aviz ' . $avizNumber, [
+                'created_by' => $userId,
+            ]);
+            $this->logAudit($userId, 'FACTORY_BUFFER_' . strtoupper($type), 'factory_buffer_adjustments', $adjustmentId, null, $avizNumber);
+
+            $this->pdo->commit();
+            return $adjustmentId;
         } catch (Throwable $error) {
             $this->pdo->rollBack();
             throw $error;
@@ -299,8 +516,9 @@ final class App
         }
 
         $lotsInput = $data['lot_qty'] ?? [];
-        if (!is_array($lotsInput) || !$lotsInput) {
-            throw new RuntimeException('Alege cel putin un lot pentru predare.');
+        $rejectInput = $data['reject_qty'] ?? [];
+        if ((!is_array($lotsInput) || !$lotsInput) && (!is_array($rejectInput) || !$rejectInput)) {
+            throw new RuntimeException('Alege cel putin un lot pentru predare sau respingere.');
         }
 
         $this->pdo->beginTransaction();
@@ -310,10 +528,12 @@ final class App
             $totalFoundation = 0;
             $totalCostCents = 0;
 
-            foreach ($lotsInput as $lotIdRaw => $qtyRaw) {
+            $lotIds = array_unique(array_merge(array_keys((array) $lotsInput), array_keys((array) $rejectInput)));
+            foreach ($lotIds as $lotIdRaw) {
                 $lotId = (int) $lotIdRaw;
-                $qty = kg_to_grams((string) $qtyRaw);
-                if ($qty <= 0) {
+                $qty = kg_to_grams((string) ($lotsInput[$lotIdRaw] ?? 0));
+                $rejectQty = kg_to_grams((string) ($rejectInput[$lotIdRaw] ?? 0));
+                if ($qty <= 0 && $rejectQty <= 0) {
                     continue;
                 }
 
@@ -324,26 +544,29 @@ final class App
                 if ((int) $lot['processor_id'] !== $processorId) {
                     throw new RuntimeException('Toate loturile trebuie sa apartina procesatorului selectat.');
                 }
-                if (!in_array($lot['status'], ['In Validare', 'Acceptat'], true)) {
-                    throw new RuntimeException('Doar loturile in validare sau acceptate pot fi predate.');
+                $summary = $this->processingLotSummary($lotId);
+                if (!$summary) {
+                    throw new RuntimeException('Un lot selectat nu mai exista.');
+                }
+                $remaining = (int) $summary['wax_custody_g'];
+                if ($qty + $rejectQty > $remaining) {
+                    throw new RuntimeException('Suma dintre predare si respingere depaseste ceara in custodie pentru un lot.');
                 }
 
-                $remaining = max(0, (int) $lot['gross_g'] - (int) ($lot['factory_sent_g'] ?? 0));
-                if ($qty > $remaining) {
-                    throw new RuntimeException('Cantitatea selectata depaseste cantitatea disponibila pentru un lot.');
-                }
-
+                $foundationQty = max(0, (int) round($qty * (1 - (((float) $processor['exchange_shrinkage_pct']) / 100))));
                 $selectedLots[] = [
                     'lot' => $lot,
                     'qty' => $qty,
+                    'reject_qty' => $rejectQty,
+                    'foundation_qty' => $foundationQty,
                 ];
                 $totalWax += $qty;
-                $totalFoundation += max(0, (int) round($qty * (1 - (((float) $processor['exchange_shrinkage_pct']) / 100))));
+                $totalFoundation += $foundationQty;
                 $totalCostCents += (int) round(($qty / 1000) * (int) $processor['processing_price_cents']);
             }
 
             if (!$selectedLots) {
-                throw new RuntimeException('Nu exista cantitati valide pentru predare.');
+                throw new RuntimeException('Nu exista cantitati valide pentru predare sau respingere.');
             }
 
             $batchNumber = $this->nextLotNumber('FAB');
@@ -365,25 +588,33 @@ final class App
             foreach ($selectedLots as $item) {
                 $lot = $item['lot'];
                 $qty = $item['qty'];
-                $this->pdo->prepare(
-                    'INSERT INTO factory_batch_items (batch_id, processing_lot_id, wax_g) VALUES (?, ?, ?)'
-                )->execute([$batchId, (int) $lot['id'], $qty]);
+                $rejectQty = $item['reject_qty'];
+                $foundationQty = $item['foundation_qty'];
+                if ($qty > 0) {
+                    $this->pdo->prepare(
+                        'INSERT INTO factory_batch_items (batch_id, processing_lot_id, wax_g) VALUES (?, ?, ?)'
+                    )->execute([$batchId, (int) $lot['id'], $qty]);
 
-                $newSent = (int) $lot['factory_sent_g'] + $qty;
-                $updateStatus = $newSent >= (int) $lot['gross_g'] ? 'Predat Fabricii' : $lot['status'];
-                $this->pdo->prepare(
-                    'UPDATE processing_lots SET factory_sent_g = ?, status = ? WHERE id = ?'
-                )->execute([$newSent, $updateStatus, (int) $lot['id']]);
-
-                if ($updateStatus !== $lot['status']) {
-                    $this->recordProcessingLotStatus((int) $lot['id'], $updateStatus, $userId);
+                    $newSent = (int) $lot['factory_sent_g'] + $qty;
+                    $this->pdo->prepare(
+                        'UPDATE processing_lots SET factory_sent_g = ? WHERE id = ?'
+                    )->execute([$newSent, (int) $lot['id']]);
+                    $this->processingMovement((int) $lot['id'], 'SEND_WAX_TO_FACTORY', $qty, 0, 0, 'Predare batch ' . $batchNumber, $userId);
+                    $this->processingMovement((int) $lot['id'], 'RECEIVE_FOUNDATION_FROM_FACTORY', 0, $foundationQty, 0, 'Receptie automata batch ' . $batchNumber, $userId);
+                }
+                if ($rejectQty > 0) {
+                    $this->processingMovement((int) $lot['id'], 'FACTORY_REJECT_WAX', $rejectQty, 0, 0, 'Respingere fabrica batch ' . $batchNumber, $userId);
                 }
             }
 
-            $this->inventory('wax_custody', -$totalWax, (int) $selectedLots[0]['lot']['store_id'], 'factory_batch', $batchId, 'Ceara trimisa la procesator');
-            $this->inventory('foundation_operational', $totalFoundation, (int) $selectedLots[0]['lot']['store_id'], 'factory_batch', $batchId, 'Faguri primiti de la procesator');
-            $this->document('AVIZ', 'factory_batch', $batchId, (int) $selectedLots[0]['lot']['store_id'], 'mock', 'Aviz catre procesator');
-            $this->document('NIR', 'factory_batch', $batchId, (int) $selectedLots[0]['lot']['store_id'], 'mock', 'NIR aviz procesator');
+            if ($totalWax > 0) {
+                $this->inventory('wax_custody', -$totalWax, (int) $selectedLots[0]['lot']['store_id'], 'factory_batch', $batchId, 'Ceara trimisa la procesator');
+                $this->inventory('foundation_operational', $totalFoundation, (int) $selectedLots[0]['lot']['store_id'], 'factory_batch', $batchId, 'Faguri primiti de la procesator');
+                $this->document('AVIZ', 'factory_batch', $batchId, (int) $selectedLots[0]['lot']['store_id'], 'issued', 'Aviz catre procesator', [
+                    'factory_batch_id' => $batchId,
+                    'created_by' => $userId,
+                ]);
+            }
             $this->logAudit($userId, 'FACTORY_BATCH_CREATE', 'factory_batches', $batchId, null, $batchNumber);
 
             $this->pdo->commit();
@@ -394,24 +625,30 @@ final class App
         }
     }
 
-    public function ensureProcessingDocument(int $lotId, string $documentType, int $userId): void
+    public function ensureProcessingDocument(int $lotId, string $documentType, int $userId, int $movementId = 0): void
     {
         $lot = $this->find('processing_lots', $lotId);
         if (!$lot) {
             throw new RuntimeException('Lotul nu exista.');
         }
 
+        $referenceType = $movementId > 0 ? 'processing_lot_movement' : 'processing_lot';
+        $referenceId = $movementId > 0 ? $movementId : $lotId;
         $stmt = $this->pdo->prepare(
             'SELECT id FROM documents WHERE reference_type = ? AND reference_id = ? AND document_type = ? LIMIT 1'
         );
-        $stmt->execute(['processing_lot', $lotId, $documentType]);
+        $stmt->execute([$referenceType, $referenceId, $documentType]);
         if ($stmt->fetchColumn()) {
             return;
         }
 
         $this->pdo->beginTransaction();
         try {
-            $this->document($documentType, 'processing_lot', $lotId, (int) $lot['store_id'], 'mock', 'Document generat mock');
+            $this->document($documentType, $referenceType, $referenceId, (int) $lot['store_id'], 'issued', 'Document generat manual', [
+                'lot_id' => $lotId,
+                'movement_id' => $movementId > 0 ? $movementId : null,
+                'created_by' => $userId,
+            ]);
             $this->logAudit($userId, 'PROCESSING_DOCUMENT', 'documents', $lotId, null, $documentType);
             $this->pdo->commit();
         } catch (Throwable $error) {
@@ -502,8 +739,8 @@ final class App
     {
         $this->pdo->beginTransaction();
         try {
-            $this->pdo->prepare('UPDATE stores SET code = ?, name = ?, address = ? WHERE id = ?')
-                ->execute([$data['store_code'], $data['store_name'], $data['store_address'], $data['store_id']]);
+            $this->pdo->prepare('UPDATE stores SET code = ?, name = ?, address = ?, processor_id = ? WHERE id = ?')
+                ->execute([$data['store_code'], $data['store_name'], $data['store_address'], ($data['store_processor_id'] ?? 0) ?: null, $data['store_id']]);
             $this->pdo->prepare(
                 'UPDATE processors SET name = ?, cui = ?, contact = ?, processing_price_cents = ?, exchange_shrinkage_pct = ?, purchase_shrinkage_pct = ? WHERE id = ?'
             )->execute([
@@ -624,21 +861,25 @@ final class App
         $code = trim($data['code']);
         $name = trim($data['name']);
         $address = trim($data['address']);
+        $processorId = (int) ($data['processor_id'] ?? 0);
 
         if ($code === '' || $name === '') {
             throw new RuntimeException('Codul si denumirea gestiunii sunt obligatorii.');
+        }
+        if ($processorId <= 0 || !$this->find('processors', $processorId)) {
+            throw new RuntimeException('Alege procesatorul asignat gestiunii.');
         }
 
         $this->pdo->beginTransaction();
         try {
             if ($id > 0) {
-                $this->pdo->prepare('UPDATE stores SET code = ?, name = ?, address = ? WHERE id = ?')
-                    ->execute([$code, $name, $address, $id]);
+                $this->pdo->prepare('UPDATE stores SET code = ?, name = ?, address = ?, processor_id = ? WHERE id = ?')
+                    ->execute([$code, $name, $address, $processorId, $id]);
                 $storeId = $id;
                 $operation = 'STORE_UPDATE';
             } else {
-                $this->pdo->prepare('INSERT INTO stores (code, name, address) VALUES (?, ?, ?)')
-                    ->execute([$code, $name, $address]);
+                $this->pdo->prepare('INSERT INTO stores (code, name, address, processor_id) VALUES (?, ?, ?, ?)')
+                    ->execute([$code, $name, $address, $processorId]);
                 $storeId = (int) $this->pdo->lastInsertId();
                 $operation = 'STORE_CREATE';
 
@@ -847,7 +1088,7 @@ final class App
         return $prefix . '-' . date('Ymd') . '-' . strtoupper(substr(bin2hex(random_bytes(3)), 0, 6));
     }
 
-    private function document(string $type, string $referenceType, int $referenceId, int $storeId, string $status, string $notes): void
+    private function document(string $type, string $referenceType, int $referenceId, int $storeId, string $status, string $notes, array $links = []): void
     {
         $stmt = $this->pdo->prepare(
             'SELECT * FROM document_series WHERE store_id = ? AND document_type = ? FOR UPDATE'
@@ -864,9 +1105,23 @@ final class App
 
         $number = (int) $series['next_number'];
         $this->pdo->prepare(
-            'INSERT INTO documents (document_type, series, number, store_id, reference_type, reference_id, status, notes)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-        )->execute([$type, $series['series'], $number, $storeId, $referenceType, $referenceId, $status, $notes]);
+            'INSERT INTO documents
+            (document_type, series, number, store_id, lot_id, movement_id, factory_batch_id, reference_type, reference_id, status, notes, created_by)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        )->execute([
+            $type,
+            $series['series'],
+            $number,
+            $storeId,
+            $links['lot_id'] ?? null,
+            $links['movement_id'] ?? null,
+            $links['factory_batch_id'] ?? null,
+            $referenceType,
+            $referenceId,
+            $status,
+            $notes,
+            $links['created_by'] ?? null,
+        ]);
 
         $this->pdo->prepare('UPDATE document_series SET next_number = next_number + 1 WHERE id = ?')
             ->execute([$series['id']]);
@@ -878,6 +1133,314 @@ final class App
             'INSERT INTO inventory_transactions (movement_type, qty_g, store_id, reference_type, reference_id, notes)
              VALUES (?, ?, ?, ?, ?, ?)'
         )->execute([$type, $qty, $storeId, $refType, $refId, $notes]);
+    }
+
+    private function processingMovement(int $lotId, string $type, int $wax, int $foundation, int $serviceValue, string $notes, int $userId): int
+    {
+        $this->pdo->prepare(
+            'INSERT INTO processing_lot_movements
+            (lot_id, movement_type, wax_g, foundation_g, service_value_cents, notes, created_by)
+             VALUES (?, ?, ?, ?, ?, ?, ?)'
+        )->execute([$lotId, $type, $wax, $foundation, $serviceValue, $notes, $userId]);
+
+        return (int) $this->pdo->lastInsertId();
+    }
+
+    private function processingLotSummaries(): array
+    {
+        $lots = $this->processingLots();
+        $summaries = [];
+        foreach ($lots as $lot) {
+            $summaries[] = $this->buildProcessingLotSummary($lot, $this->movementTotals([(int) $lot['id']])[(int) $lot['id']] ?? []);
+        }
+        return $summaries;
+    }
+
+    private function processingLotSummary(int $lotId): ?array
+    {
+        $lot = $this->pdo->prepare(
+            'SELECT p.*, c.name AS customer_name, c.customer_type, s.name AS store_name, pr.name AS processor_name
+             FROM processing_lots p
+             JOIN customers c ON c.id = p.customer_id
+             JOIN stores s ON s.id = p.store_id
+             LEFT JOIN processors pr ON pr.id = p.processor_id
+             WHERE p.id = ?'
+        );
+        $lot->execute([$lotId]);
+        $row = $lot->fetch();
+        if (!$row) {
+            return null;
+        }
+
+        return $this->buildProcessingLotSummary($row, $this->movementTotals([$lotId])[$lotId] ?? []);
+    }
+
+    private function movementTotals(array $lotIds): array
+    {
+        if (!$lotIds) {
+            return [];
+        }
+
+        $placeholders = implode(',', array_fill(0, count($lotIds), '?'));
+        $stmt = $this->pdo->prepare(
+            "SELECT lot_id, movement_type,
+                    COALESCE(SUM(wax_g), 0) AS wax_g,
+                    COALESCE(SUM(foundation_g), 0) AS foundation_g,
+                    COALESCE(SUM(service_value_cents), 0) AS service_value_cents
+             FROM processing_lot_movements
+             WHERE lot_id IN ($placeholders)
+             GROUP BY lot_id, movement_type"
+        );
+        $stmt->execute($lotIds);
+
+        $totals = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $totals[(int) $row['lot_id']][$row['movement_type']] = [
+                'wax_g' => (int) $row['wax_g'],
+                'foundation_g' => (int) $row['foundation_g'],
+                'service_value_cents' => (int) $row['service_value_cents'],
+            ];
+        }
+        return $totals;
+    }
+
+    private function buildProcessingLotSummary(array $lot, array $totals): array
+    {
+        $wax = static fn (string $type): int => (int) ($totals[$type]['wax_g'] ?? 0);
+        $foundation = static fn (string $type): int => (int) ($totals[$type]['foundation_g'] ?? 0);
+
+        $received = $wax('RECEIVE_WAX_FROM_CLIENT');
+        $exchanged = $wax('EXCHANGE_WAX_WITH_CLIENT');
+        $sentFactory = $wax('SEND_WAX_TO_FACTORY');
+        $returned = $wax('RETURN_WAX_TO_CLIENT');
+        $rejected = $wax('FACTORY_REJECT_WAX');
+        $lossWax = $wax('RECORD_LOSS');
+        $foundationDelivered = $foundation('EXCHANGE_WAX_WITH_CLIENT');
+        $foundationReceived = $foundation('RECEIVE_FOUNDATION_FROM_FACTORY');
+        $foundationRecovered = $foundation('RECOVER_FOUNDATION_FROM_CLIENT');
+        $lossFoundation = $foundation('RECORD_LOSS');
+
+        $waxCustody = max(0, $received - $sentFactory - $returned - $lossWax);
+        $waxAvailableForExchange = max(0, $received - $exchanged - $returned - $lossWax);
+        $waxToFactory = max(0, $exchanged - $sentFactory);
+        $openRejectedWax = max(0, $rejected - $returned - $lossWax);
+        $foundationToRecover = max(0, $this->foundationForWax($openRejectedWax, (float) $lot['shrinkage_pct']) - $foundationRecovered - $lossFoundation);
+        $foundationToClient = max(0, $foundationReceived - $foundationDelivered);
+
+        $status = 'Procesare';
+        if ($foundationToRecover > 0) {
+            $status = 'Recuperare';
+        } elseif ($waxCustody === 0 && $waxToFactory === 0 && $foundationToClient === 0 && $foundationToRecover === 0 && $openRejectedWax === 0) {
+            $status = 'Inchis';
+        }
+
+        return [
+            'lot' => $lot,
+            'total_received_g' => $received,
+            'wax_custody_g' => $waxCustody,
+            'wax_available_for_exchange_g' => $waxAvailableForExchange,
+            'wax_exchanged_g' => $exchanged,
+            'foundation_delivered_g' => $foundationDelivered,
+            'wax_to_factory_g' => $waxToFactory,
+            'wax_sent_factory_g' => $sentFactory,
+            'foundation_received_factory_g' => $foundationReceived,
+            'wax_rejected_factory_g' => $rejected,
+            'wax_returned_client_g' => $returned,
+            'foundation_to_recover_g' => $foundationToRecover,
+            'foundation_to_client_g' => $foundationToClient,
+            'loss_g' => $lossWax + $lossFoundation,
+            'calculated_status' => $status,
+        ];
+    }
+
+    private function foundationForWax(int $wax, float $shrinkagePct): int
+    {
+        return max(0, (int) round($wax * (1 - ($shrinkagePct / 100))));
+    }
+
+    private function documentsForLot(int $lotId): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT * FROM documents
+             WHERE lot_id = ? OR (reference_type = ? AND reference_id = ?)
+             ORDER BY id ASC'
+        );
+        $stmt->execute([$lotId, 'processing_lot', $lotId]);
+        $documents = [];
+        foreach ($stmt->fetchAll() as $document) {
+            $key = ((int) ($document['movement_id'] ?? 0)) . ':' . $document['document_type'];
+            $documents[$key][] = $document;
+        }
+        return $documents;
+    }
+
+    private function processingRegisterMeta(string $referenceType, int $referenceId): array
+    {
+        if ($referenceType === 'processing_lot') {
+            $stmt = $this->pdo->prepare(
+                'SELECT p.id, c.name AS partner_name, u.username
+                 FROM processing_lots p
+                 JOIN customers c ON c.id = p.customer_id
+                 JOIN users u ON u.id = p.created_by
+                 WHERE p.id = ?'
+            );
+            $stmt->execute([$referenceId]);
+            $row = $stmt->fetch();
+            return [
+                'partner' => $row['partner_name'] ?? 'Client',
+                'document' => $this->documentInfoForLot((int) ($row['id'] ?? $referenceId), 'PV-CUST'),
+                'lot_number' => $this->lotNumber((int) ($row['id'] ?? $referenceId)),
+                'lot_url' => 'index.php?page=lot_detail&lot_id=' . (int) ($row['id'] ?? $referenceId),
+                'operator' => $row['username'] ?? '-',
+            ];
+        }
+
+        if ($referenceType === 'processing_lot_movement') {
+            $stmt = $this->pdo->prepare(
+                'SELECT m.*, p.lot_number, c.name AS partner_name, u.username
+                 FROM processing_lot_movements m
+                 JOIN processing_lots p ON p.id = m.lot_id
+                 JOIN customers c ON c.id = p.customer_id
+                 JOIN users u ON u.id = m.created_by
+                 WHERE m.id = ?'
+            );
+            $stmt->execute([$referenceId]);
+            $row = $stmt->fetch();
+            $fallback = match ($row['movement_type'] ?? '') {
+                'EXCHANGE_WAX_WITH_CLIENT' => 'PV-FAG',
+                'RETURN_WAX_TO_CLIENT' => 'PV-RET',
+                default => 'PV',
+            };
+            return [
+                'partner' => $row['partner_name'] ?? 'Client',
+                'document' => $this->documentInfoForMovement($referenceId, $fallback),
+                'lot_number' => $row['lot_number'] ?? '-',
+                'lot_url' => 'index.php?page=lot_detail&lot_id=' . (int) ($row['lot_id'] ?? 0),
+                'operator' => $row['username'] ?? '-',
+            ];
+        }
+
+        if ($referenceType === 'factory_batch') {
+            $stmt = $this->pdo->prepare(
+                'SELECT b.*, p.name AS partner_name, u.username
+                 FROM factory_batches b
+                 JOIN processors p ON p.id = b.processor_id
+                 JOIN users u ON u.id = b.created_by
+                 WHERE b.id = ?'
+            );
+            $stmt->execute([$referenceId]);
+            $row = $stmt->fetch();
+            return [
+                'partner' => $row['partner_name'] ?? 'Fabrica',
+                'document' => $this->documentInfoForReference('factory_batch', $referenceId, 'AVIZ'),
+                'lot_number' => '',
+                'lot_url' => '',
+                'operator' => $row['username'] ?? '-',
+            ];
+        }
+
+        if ($referenceType === 'factory_buffer_adjustment') {
+            $stmt = $this->pdo->prepare(
+                'SELECT a.*, s.processor_id, p.name AS partner_name, u.username
+                 FROM factory_buffer_adjustments a
+                 JOIN stores s ON s.id = a.store_id
+                 LEFT JOIN processors p ON p.id = s.processor_id
+                 JOIN users u ON u.id = a.created_by
+                 WHERE a.id = ?'
+            );
+            $stmt->execute([$referenceId]);
+            $row = $stmt->fetch();
+            return [
+                'partner' => $row['partner_name'] ?? 'Fabrica',
+                'document' => $this->documentInfoForReference('factory_buffer_adjustment', $referenceId, 'NIR'),
+                'lot_number' => '',
+                'lot_url' => '',
+                'operator' => $row['username'] ?? '-',
+            ];
+        }
+
+        return [
+            'partner' => '-',
+            'document' => ['label' => '-', 'url' => ''],
+            'lot_number' => '',
+            'lot_url' => '',
+            'operator' => '-',
+        ];
+    }
+
+    private function documentInfoForLot(int $lotId, string $fallback): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT id, document_type, series, number
+             FROM documents
+             WHERE lot_id = ? AND document_type = ?
+             ORDER BY id DESC
+             LIMIT 1'
+        );
+        $stmt->execute([$lotId, $fallback]);
+        $document = $stmt->fetch();
+        return $this->documentInfo($document ?: null, $fallback);
+    }
+
+    private function documentInfoForMovement(int $movementId, string $fallback): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT id, document_type, series, number
+             FROM documents
+             WHERE movement_id = ?
+               AND document_type IN ("PV-CUST", "PV-FAG", "PV-RET", "NIR", "AVIZ")
+             ORDER BY id DESC
+             LIMIT 1'
+        );
+        $stmt->execute([$movementId]);
+        $document = $stmt->fetch();
+        return $this->documentInfo($document ?: null, $fallback);
+    }
+
+    private function documentInfoForReference(string $referenceType, int $referenceId, string $fallback): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT id, document_type, series, number
+             FROM documents
+             WHERE reference_type = ? AND reference_id = ?
+               AND document_type = ?
+             ORDER BY id DESC
+             LIMIT 1'
+        );
+        $stmt->execute([$referenceType, $referenceId, $fallback]);
+        $document = $stmt->fetch();
+        return $this->documentInfo($document ?: null, $fallback);
+    }
+
+    private function documentInfo(?array $document, string $fallback): array
+    {
+        if (!$document) {
+            return ['label' => $fallback, 'url' => ''];
+        }
+
+        return [
+            'label' => $this->formatDocumentLabel($document),
+            'url' => 'index.php?page=document_mock&document_id=' . (int) $document['id'],
+        ];
+    }
+
+    private function formatDocumentLabel(array $document): string
+    {
+        return trim($document['document_type'] . ' ' . $document['series'] . '-' . $document['number']);
+    }
+
+    private function lotNumber(int $lotId): string
+    {
+        $stmt = $this->pdo->prepare('SELECT lot_number FROM processing_lots WHERE id = ?');
+        $stmt->execute([$lotId]);
+        return (string) ($stmt->fetchColumn() ?: '');
+    }
+
+    private function isAdmin(int $userId): bool
+    {
+        $stmt = $this->pdo->prepare("SELECT role FROM users WHERE id = ? LIMIT 1");
+        $stmt->execute([$userId]);
+        return $stmt->fetchColumn() === 'admin';
     }
 
     private function recordProcessingLotStatus(int $lotId, string $status, int $userId): void
@@ -898,6 +1461,13 @@ final class App
     {
         $stmt = $this->pdo->prepare('SELECT COALESCE(SUM(qty_g), 0) FROM inventory_transactions WHERE movement_type = ?');
         $stmt->execute([$type]);
+        return (int) $stmt->fetchColumn();
+    }
+
+    private function sumInventoryForStore(string $type, int $storeId): int
+    {
+        $stmt = $this->pdo->prepare('SELECT COALESCE(SUM(qty_g), 0) FROM inventory_transactions WHERE movement_type = ? AND store_id = ?');
+        $stmt->execute([$type, $storeId]);
         return (int) $stmt->fetchColumn();
     }
 

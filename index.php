@@ -26,6 +26,7 @@ try {
 $auth = new Auth($pdo);
 $app = new App($pdo);
 $page = $_GET['page'] ?? 'dashboard';
+$activeFlow = $_SESSION['active_flow'] ?? '';
 
 if ($page === 'customer_lookup') {
     require_login();
@@ -33,6 +34,23 @@ if ($page === 'customer_lookup') {
     echo json_encode([
         'customers' => $app->searchCustomers((string) ($_GET['customer_type'] ?? 'PF'), (string) ($_GET['term'] ?? '')),
     ]);
+    exit;
+}
+
+if ($page === 'document_mock') {
+    require_login();
+    $doc = $app->documentById((int) ($_GET['document_id'] ?? 0));
+    if (!$doc) {
+        http_response_code(404);
+        echo 'Documentul nu exista.';
+        exit;
+    }
+
+    header('Content-Type: text/plain; charset=utf-8');
+    echo "Mock document PDF\n";
+    echo $doc['document_type'] . ' ' . $doc['series'] . '-' . $doc['number'] . "\n";
+    echo 'Status: ' . $doc['status'] . "\n";
+    echo 'Generarea PDF va fi definita ulterior.';
     exit;
 }
 
@@ -53,6 +71,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($action === 'logout') {
             $auth->logout();
             redirect('login');
+        }
+
+        if ($action === 'select_flow') {
+            $flow = post_string('flow');
+            if ($flow !== 'processing') {
+                flash('Fluxul de achizitie va fi reconstruit separat.', 'error');
+                redirect('dashboard');
+            }
+
+            $_SESSION['active_flow'] = 'processing';
+            flash('Fluxul de procesare a fost activat.');
+            redirect('dashboard');
         }
 
         if ($action === 'create_processing') {
@@ -89,18 +119,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($action === 'processing_document') {
-            $app->ensureProcessingDocument(post_int('lot_id'), post_string('document_type'), $user['id']);
+            $app->ensureProcessingDocument(post_int('lot_id'), post_string('document_type'), $user['id'], post_int('movement_id'));
             flash('Documentul mock a fost generat.');
-            redirect('lots');
+            $redirectPage = post_int('movement_id') > 0 ? 'lot_detail' : 'lots';
+            redirect($redirectPage, $redirectPage === 'lot_detail' ? ['lot_id' => post_int('lot_id')] : []);
+        }
+
+        if ($action === 'processing_exchange') {
+            $app->createProcessingExchange(post_int('lot_id'), post_string('exchange_kg'), $user['id']);
+            flash('Schimbul de ceara a fost inregistrat.');
+            redirect('lot_detail', ['lot_id' => post_int('lot_id')]);
+        }
+
+        if ($action === 'processing_return') {
+            $app->createProcessingReturn(post_int('lot_id'), post_string('return_kg'), post_string('return_notes'), $user['id']);
+            flash('Returul de ceara a fost inregistrat.');
+            redirect('lot_detail', ['lot_id' => post_int('lot_id')]);
         }
 
         if ($action === 'create_factory_batch') {
             $app->createFactoryBatch([
                 'processor_id' => post_int('processor_id'),
                 'lot_qty' => $_POST['lot_qty'] ?? [],
+                'reject_qty' => $_POST['reject_qty'] ?? [],
             ], $user['id']);
             flash('Predarea catre fabrica a fost salvata.');
             redirect('factory_delivery', ['processor_id' => post_int('processor_id')]);
+        }
+
+        if ($action === 'factory_buffer_adjustment') {
+            $app->createFactoryBufferAdjustment([
+                'adjustment_type' => post_string('adjustment_type'),
+                'aviz_number' => post_string('aviz_number'),
+                'qty_kg' => post_string('qty_kg'),
+                'store_id' => post_int('store_id'),
+                'notes' => post_string('notes'),
+            ], $user['id']);
+            flash('Avizul de buffer fabrica a fost inregistrat.');
+            redirect('factory_buffer');
         }
 
         if ($action === 'create_purchase') {
@@ -167,6 +223,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'code' => post_string('store_code'),
                 'name' => post_string('store_name'),
                 'address' => post_string('store_address'),
+                'processor_id' => post_int('store_processor_id'),
             ], $user['id']);
             flash('Gestiunea a fost salvata.');
             redirect('settings', ['settings_tab' => 'stores']);
@@ -195,6 +252,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'store_code' => post_string('store_code'),
                 'store_name' => post_string('store_name'),
                 'store_address' => post_string('store_address'),
+                'store_processor_id' => post_int('store_processor_id'),
                 'processor_id' => post_int('processor_id'),
                 'processor_name' => post_string('processor_name'),
                 'processor_cui' => post_string('processor_cui'),
@@ -220,21 +278,29 @@ if ($page === 'login') {
 
 require_login();
 
-$allowed = ['dashboard', 'processing', 'lots', 'factory_delivery', 'purchases', 'documents', 'reports', 'settings', 'audit'];
+$activeFlow = $_SESSION['active_flow'] ?? '';
+$basePages = ['dashboard', 'documents', 'reports', 'settings', 'audit'];
+$processingPages = ['processing', 'lots', 'lot_detail', 'factory_delivery', 'factory_buffer', 'processing_register'];
+$allowed = $activeFlow === 'processing'
+    ? array_merge($basePages, $processingPages)
+    : $basePages;
+
 if (!in_array($page, $allowed, true)) {
     $page = 'dashboard';
 }
 
 $data = match ($page) {
-    'dashboard' => $app->dashboard(),
+    'dashboard' => array_merge($app->dashboard(), ['active_flow' => $activeFlow]),
     'processing' => [
         'processors' => $app->processors(),
         'assigned_store' => $app->userPrimaryStore(current_user()['id']),
-        'default_processor' => $app->defaultProcessor(),
+        'default_processor' => $app->defaultProcessorForUser(current_user()['id']),
     ],
     'lots' => $app->processingLotsBoard((array) ($_GET['status'] ?? [])),
+    'lot_detail' => $app->processingLotDetail((int) ($_GET['lot_id'] ?? 0)),
     'factory_delivery' => $app->factoryDeliveryData((int) ($_GET['processor_id'] ?? 0)),
-    'purchases' => ['lots' => $app->purchaseLots(), 'stores' => $app->stores(), 'processors' => $app->processors()],
+    'factory_buffer' => $app->factoryBufferData(),
+    'processing_register' => $app->processingRegisterData(current_user()['id']),
     'documents' => ['documents' => $app->documents()],
     'reports' => ['dashboard' => $app->dashboard(), 'processing' => $app->processingLots(), 'purchases' => $app->purchaseLots()],
     'settings' => $app->settings(),

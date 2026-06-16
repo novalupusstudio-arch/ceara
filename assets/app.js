@@ -12,26 +12,52 @@ document.addEventListener("DOMContentLoaded", () => {
   const factoryForm = document.querySelector("[data-factory-form]");
   if (factoryForm) {
     const totalWax = factoryForm.querySelector("[data-factory-total-wax]");
+    const totalReject = factoryForm.querySelector("[data-factory-total-reject]");
     const totalCost = factoryForm.querySelector("[data-factory-total-cost]");
     const totalFoundation = factoryForm.querySelector("[data-factory-total-foundation]");
     const rows = factoryForm.querySelectorAll("[data-factory-row]");
 
+    function parseKg(value) {
+      return Number(String(value || "0").replace(",", "."));
+    }
+
     function renderFactoryTotals() {
       let waxKg = 0;
+      let rejectKg = 0;
       let foundationKg = 0;
       let costCents = 0;
 
       rows.forEach((row) => {
         const qtyInput = row.querySelector("[data-factory-qty]");
+        const rejectInput = row.querySelector("[data-factory-reject-qty]");
         const rowCost = row.querySelector("[data-row-cost]");
         const rowFoundation = row.querySelector("[data-row-foundation]");
         const priceCents = Number(row.dataset.priceCents || factoryForm.dataset.priceCents || 0);
         const shrinkagePct = Number(row.dataset.shrinkagePct || factoryForm.dataset.shrinkagePct || 0);
-        const qtyKg = Number(String(qtyInput.value || "0").replace(",", "."));
+        const maxWaxKg = Number(row.dataset.maxWaxKg || 0);
+        let qtyKg = parseKg(qtyInput.value);
+        let rowRejectKg = parseKg(rejectInput.value);
+
+        if (!Number.isFinite(qtyKg) || qtyKg < 0) {
+          qtyKg = 0;
+        }
+        if (!Number.isFinite(rowRejectKg) || rowRejectKg < 0) {
+          rowRejectKg = 0;
+        }
+        if (qtyKg > maxWaxKg) {
+          qtyKg = maxWaxKg;
+          qtyInput.value = maxWaxKg.toFixed(3);
+        }
+        if (qtyKg + rowRejectKg > maxWaxKg) {
+          rowRejectKg = Math.max(0, maxWaxKg - qtyKg);
+          rejectInput.value = rowRejectKg.toFixed(3);
+        }
+
         const rowCostCents = Math.max(0, Math.round(qtyKg * priceCents));
         const rowFoundationKg = Math.max(0, qtyKg * (1 - (shrinkagePct / 100)));
 
         waxKg += qtyKg;
+        rejectKg += rowRejectKg;
         foundationKg += rowFoundationKg;
         costCents += rowCostCents;
 
@@ -40,17 +66,54 @@ document.addEventListener("DOMContentLoaded", () => {
       });
 
       totalWax.value = `${waxKg.toFixed(3)} kg`;
+      totalReject.value = `${rejectKg.toFixed(3)} kg`;
       totalCost.value = `${(costCents / 100).toFixed(2)} lei`;
       totalFoundation.value = `${foundationKg.toFixed(3)} kg`;
     }
 
-    factoryForm.querySelectorAll("[data-factory-qty]").forEach((input) => {
+    factoryForm.querySelectorAll("[data-factory-qty], [data-factory-reject-qty]").forEach((input) => {
       input.addEventListener("input", renderFactoryTotals);
       input.addEventListener("change", renderFactoryTotals);
     });
 
     renderFactoryTotals();
     return;
+  }
+
+  const exchangeForm = document.querySelector("[data-exchange-form]");
+  if (exchangeForm) {
+    const qtyInput = exchangeForm.querySelector("[data-exchange-qty]");
+    const foundationOutput = exchangeForm.querySelector("[data-exchange-foundation]");
+    const serviceOutput = exchangeForm.querySelector("[data-exchange-service]");
+    const maxWaxKg = Number(exchangeForm.dataset.maxWaxKg || 0);
+    const priceCents = Number(exchangeForm.dataset.priceCents || 0);
+    const shrinkagePct = Number(exchangeForm.dataset.shrinkagePct || 0);
+
+    function parseKg(value) {
+      return Number(String(value || "0").replace(",", "."));
+    }
+
+    function renderExchangeValues() {
+      let waxKg = parseKg(qtyInput.value);
+      if (!Number.isFinite(waxKg) || waxKg < 0) {
+        waxKg = 0;
+      }
+
+      if (waxKg > maxWaxKg) {
+        waxKg = maxWaxKg;
+        qtyInput.value = maxWaxKg.toFixed(3);
+      }
+
+      const foundationKg = Math.max(0, waxKg * (1 - (shrinkagePct / 100)));
+      const serviceCents = Math.max(0, Math.round(waxKg * priceCents));
+
+      foundationOutput.value = `${foundationKg.toFixed(3)} kg`;
+      serviceOutput.value = `${(serviceCents / 100).toFixed(2)} lei`;
+    }
+
+    qtyInput.addEventListener("input", renderExchangeValues);
+    qtyInput.addEventListener("change", renderExchangeValues);
+    renderExchangeValues();
   }
 
   const form = document.querySelector("[data-processing-form]");

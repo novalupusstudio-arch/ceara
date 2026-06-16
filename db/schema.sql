@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS stores (
     code VARCHAR(40) NOT NULL UNIQUE,
     name VARCHAR(160) NOT NULL,
     address VARCHAR(255) NOT NULL DEFAULT '',
+    processor_id INT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -99,6 +100,29 @@ CREATE TABLE IF NOT EXISTS processing_lot_status_events (
     FOREIGN KEY (created_by) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS processing_lot_movements (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    lot_id INT NOT NULL,
+    movement_type ENUM(
+        'RECEIVE_WAX_FROM_CLIENT',
+        'EXCHANGE_WAX_WITH_CLIENT',
+        'RETURN_WAX_TO_CLIENT',
+        'SEND_WAX_TO_FACTORY',
+        'RECEIVE_FOUNDATION_FROM_FACTORY',
+        'FACTORY_REJECT_WAX',
+        'RECORD_LOSS',
+        'RECOVER_FOUNDATION_FROM_CLIENT'
+    ) NOT NULL,
+    wax_g INT NOT NULL DEFAULT 0,
+    foundation_g INT NOT NULL DEFAULT 0,
+    service_value_cents INT NOT NULL DEFAULT 0,
+    notes TEXT NULL,
+    created_by INT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (lot_id) REFERENCES processing_lots(id) ON DELETE CASCADE,
+    FOREIGN KEY (created_by) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS factory_batches (
     id INT AUTO_INCREMENT PRIMARY KEY,
     batch_number VARCHAR(40) NOT NULL UNIQUE,
@@ -122,6 +146,19 @@ CREATE TABLE IF NOT EXISTS factory_batch_items (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (batch_id) REFERENCES factory_batches(id) ON DELETE CASCADE,
     FOREIGN KEY (processing_lot_id) REFERENCES processing_lots(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS factory_buffer_adjustments (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    adjustment_type ENUM('plus', 'minus') NOT NULL,
+    aviz_number VARCHAR(80) NOT NULL,
+    qty_g INT NOT NULL,
+    store_id INT NOT NULL,
+    notes TEXT NULL,
+    created_by INT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (store_id) REFERENCES stores(id),
+    FOREIGN KEY (created_by) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS purchase_lots (
@@ -159,12 +196,21 @@ CREATE TABLE IF NOT EXISTS documents (
     series VARCHAR(80) NOT NULL,
     number INT NOT NULL,
     store_id INT NOT NULL,
+    lot_id INT NULL,
+    movement_id INT NULL,
+    factory_batch_id INT NULL,
     reference_type VARCHAR(60) NOT NULL,
     reference_id INT NOT NULL,
-    status VARCHAR(40) NOT NULL DEFAULT 'mock',
+    status VARCHAR(40) NOT NULL DEFAULT 'draft',
     notes TEXT NULL,
+    created_by INT NULL,
+    printed_at TIMESTAMP NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (store_id) REFERENCES stores(id)
+    FOREIGN KEY (store_id) REFERENCES stores(id),
+    FOREIGN KEY (lot_id) REFERENCES processing_lots(id) ON DELETE SET NULL,
+    FOREIGN KEY (movement_id) REFERENCES processing_lot_movements(id) ON DELETE SET NULL,
+    FOREIGN KEY (factory_batch_id) REFERENCES factory_batches(id) ON DELETE SET NULL,
+    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS inventory_transactions (

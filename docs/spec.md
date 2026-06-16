@@ -111,8 +111,40 @@ Operator can:
 ### Main Screens
 
 - Processing lot creation
-- Lot board with live filters
+- Lot summary with calculated balances
+- Lot detail with movement journal and movement-level documents
 - Batch factory delivery page
+- Factory buffer page
+- Processing store register
+
+### Current Movement Model
+
+Processing lots are containers. Operational state is calculated from append-only
+movements:
+
+- `RECEIVE_WAX_FROM_CLIENT`
+- `EXCHANGE_WAX_WITH_CLIENT`
+- `RETURN_WAX_TO_CLIENT`
+- `SEND_WAX_TO_FACTORY`
+- `RECEIVE_FOUNDATION_FROM_FACTORY`
+- `FACTORY_REJECT_WAX`
+- `RECORD_LOSS`
+- `RECOVER_FOUNDATION_FROM_CLIENT`
+
+Factory delivery currently records both the wax sent to factory and the
+calculated foundation quantity received from factory, increasing operational
+foundation stock immediately.
+
+### Processing Register
+
+The processing register is scoped to the operator's assigned store and is
+calculated from inventory transactions. It shows partner, lot link, document
+link, date, wax custody movement, foundation custody movement, and operator.
+
+### Store / Processor Constraint
+
+Each store is assigned to one processor. Multiple processors for one physical
+location should be represented as separate stores.
 
 ## Purchase Flow
 
@@ -124,8 +156,8 @@ Operator can:
 
 ### Current Behavior
 
-- Purchase flow exists as a separate business path.
-- It follows the same general model of mock documents and stock movement.
+- Purchase flow is intentionally disabled in the current navigation.
+- It will be rebuilt from zero with separate stock rules from processing.
 
 ## Documents
 

@@ -1,7 +1,16 @@
 $ErrorActionPreference = "Stop"
 
 $source = Resolve-Path (Join-Path $PSScriptRoot "..")
+$targetConfig = Join-Path $source "config\xampp-target.local.txt"
 $target = "E:\XAMP\htdocs\ceara"
+
+if (Test-Path -LiteralPath $targetConfig) {
+    $configuredTarget = (Get-Content -LiteralPath $targetConfig -Raw).Trim()
+
+    if ($configuredTarget) {
+        $target = $configuredTarget
+    }
+}
 
 $excludedDirectories = @(
     ".git",
@@ -19,6 +28,7 @@ $excludedDirectories = @(
 
 $excludedFiles = @(
     ".env",
+    "xampp-target.local.txt",
     ".DS_Store",
     "Thumbs.db",
     "Desktop.ini"

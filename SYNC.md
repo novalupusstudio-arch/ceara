@@ -1,10 +1,21 @@
 # XAMPP Sync
 
-The project source lives in:
+The project source lives in each developer's local clone.
 
-`E:\NovaLupus\ceara`
+The local XAMPP target path is machine-specific and should be stored in this
+untracked file:
 
-The local test copy will live in:
+`config/xampp-target.local.txt`
+
+The file should contain only the absolute deploy path, for example:
+
+```text
+D:\xampp\htdocs\ceara
+```
+
+This file is ignored by git. Each Codex instance / workstation must create its
+own local copy before using the sync script. If the file is missing, the script
+falls back to the original development path:
 
 `E:\XAMP\htdocs\ceara`
 

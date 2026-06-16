@@ -144,7 +144,113 @@ Notes:
 
 Current app version in config:
 
-- `1.0.006`
+- `1.0.009`
+
+## Processing Refactor Note
+
+Processing lots are no longer intended to behave as one rigid status workflow.
+The new model keeps `processing_lots` as the main lot container and uses
+append-only rows in `processing_lot_movements` as the source of truth for
+balances and operational state.
+
+Implemented movement types:
+
+- `RECEIVE_WAX_FROM_CLIENT`
+- `EXCHANGE_WAX_WITH_CLIENT`
+- `RETURN_WAX_TO_CLIENT`
+- `SEND_WAX_TO_FACTORY`
+- `RECEIVE_FOUNDATION_FROM_FACTORY`
+- `FACTORY_REJECT_WAX`
+- `RECORD_LOSS`
+- `RECOVER_FOUNDATION_FROM_CLIENT`
+
+The `Loturi ceara` page now shows calculated totals and calculated status:
+
+- `Procesare`
+- `Recuperare`
+- `Inchis`
+
+The `lot_detail` page shows lot header data, calculated balances, movement
+journal, exchange action, return action, and document buttons tied to movement
+rows. Exchange documents (`FACT`, `BON`, `PV-FAG`) are generated manually from
+the exchange movement row.
+
+Factory delivery remains batch-based. It creates `SEND_WAX_TO_FACTORY`
+movements, decreases wax custody, creates automatic
+`RECEIVE_FOUNDATION_FROM_FACTORY` movements for the calculated foundation
+quantity, and increases `foundation_operational`.
+
+The local XAMPP database was intentionally cleared of old processing lot data
+after this refactor so new testing starts from the movement model.
+
+## Current Workflow Model
+
+The application now starts from a dashboard with two intended business flows:
+
+- `Schimb de ceara` / processing flow: active and partially functional.
+- `Achizitie ceara`: intentionally disabled for now and planned to be rebuilt
+  from zero with separate stock rules.
+
+Before a flow is selected, the sidebar shows only general pages: Dashboard,
+Documente, Rapoarte, Setari, and Audit. Selecting `Schimb de ceara` activates
+the processing menu:
+
+- Procesare ceara
+- Loturi ceara
+- Predare fabrica
+- Buffer fabrica
+- Registru gestiune
+
+The dashboard KPI row currently shows only:
+
+- Stoc faguri operational
+- Ceara in custodie
+- Ceara proprie
+
+## Store / Processor Rule
+
+Each store / gestiune is assigned to exactly one processor for the processing
+flow. If a physical location needs multiple processors, create separate
+gestiuni, for example `Onesti_Boca` and `Onesti_Stuparul`.
+
+Users operate through their primary assigned store. Processing register and
+operational actions are scoped to that store.
+
+## Processing Register
+
+`Registru gestiune` is a store-scoped operational register for processing.
+It is calculated from `inventory_transactions`, not entered manually.
+
+The register shows:
+
+- Partner: client or factory / assigned processor.
+- Lot: link to lot detail when the movement belongs to a lot.
+- Document: mock link now; later it will open the generated PDF from disk.
+- Data.
+- Ceara in custodie: signed in/out quantity.
+- Faguri in custodie: signed in/out quantity.
+- Operator.
+
+Totals at the top show the current wax custody and operational foundation
+stock for the operator's store. Column totals show the sum of displayed
+movements.
+
+## Buffer Fabrica
+
+`Buffer fabrica` manages initial and corrective foundation stock received from
+or returned to the assigned processor. Each buffer entry is append-only:
+
+- `Plus` increases `foundation_operational`.
+- `Minus` decreases `foundation_operational` and cannot make stock negative.
+- Each buffer aviz automatically generates a `NIR` document record.
+- Existing and new NIR records are linked through the mock document endpoint.
+
+## Document Links
+
+Documents are still mock records. Links currently open
+`index.php?page=document_mock&document_id=...`, which displays a simple text
+placeholder. Later, generated PDF files will be saved to disk and the same
+document links should open/print those PDFs.
 
 ## Important Business Rules
 

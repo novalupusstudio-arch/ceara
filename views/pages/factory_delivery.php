@@ -39,6 +39,10 @@ $shrinkagePct = $selectedProcessor ? (float) $selectedProcessor['exchange_shrink
                 <input value="0.000 kg" readonly data-factory-total-wax>
             </label>
             <label>
+                Total respingere fabrica
+                <input value="0.000 kg" readonly data-factory-total-reject>
+            </label>
+            <label>
                 Cost procesare
                 <input value="0.00 lei" readonly data-factory-total-cost>
             </label>
@@ -57,31 +61,46 @@ $shrinkagePct = $selectedProcessor ? (float) $selectedProcessor['exchange_shrink
                         <th>Status</th>
                         <th>Ceara lot</th>
                         <th>Predare fabrica</th>
+                        <th>Respingere fabrica</th>
                         <th>Cost</th>
                         <th>Faguri</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php foreach ($data['lots'] as $row): ?>
-                        <?php $lot = $row['lot']; ?>
-                        <tr data-factory-row data-price-cents="<?= h((string) $priceCents) ?>" data-shrinkage-pct="<?= h((string) $shrinkagePct) ?>">
+                        <?php
+                        $lot = $row['lot'];
+                        $maxKg = number_format(((int) $row['remaining_g']) / 1000, 3, '.', '');
+                        ?>
+                        <tr
+                            data-factory-row
+                            data-price-cents="<?= h((string) $priceCents) ?>"
+                            data-shrinkage-pct="<?= h((string) $shrinkagePct) ?>"
+                            data-max-wax-kg="<?= h($maxKg) ?>"
+                        >
                             <td>
                                 <strong><?= h($lot['customer_name']) ?></strong>
-                                <span class="muted block"><?= h($lot['customer_type']) ?> · <?= h($lot['store_name']) ?></span>
+                                <span class="muted block"><?= h($lot['customer_type']) ?> - <?= h($lot['store_name']) ?></span>
                             </td>
                             <td>
                                 <strong><?= h($lot['lot_number']) ?></strong>
                                 <span class="muted block">Ramas <?= h(grams_to_kg((int) $row['remaining_g'])) ?></span>
                             </td>
-                            <td><span class="status"><?= h($lot['status']) ?></span></td>
+                            <td><span class="status"><?= h($row['summary']['calculated_status']) ?></span></td>
                             <td>
-                                <span class="muted block"><?= h(grams_to_kg((int) $lot['gross_g'])) ?></span>
-                                <span class="muted block">Trimis pana acum: <?= h(grams_to_kg((int) $lot['factory_sent_g'])) ?></span>
+                                <span class="muted block">Primit: <?= h(grams_to_kg((int) $row['summary']['total_received_g'])) ?></span>
+                                <span class="muted block">Custodie: <?= h(grams_to_kg((int) $row['remaining_g'])) ?></span>
                             </td>
                             <td>
                                 <label class="factory-qty">
                                     <span class="sr-only">Cantitate de predat</span>
-                                    <input type="number" step="0.001" min="0" max="<?= h(number_format(((int) $row['remaining_g']) / 1000, 3, '.', '')) ?>" name="lot_qty[<?= h((string) $lot['id']) ?>]" value="<?= h(number_format(((int) $row['selected_g']) / 1000, 3, '.', '')) ?>" data-factory-qty>
+                                    <input type="number" step="0.001" min="0" max="<?= h($maxKg) ?>" name="lot_qty[<?= h((string) $lot['id']) ?>]" value="<?= h($maxKg) ?>" data-factory-qty>
+                                </label>
+                            </td>
+                            <td>
+                                <label class="factory-qty">
+                                    <span class="sr-only">Cantitate respinsa de fabrica</span>
+                                    <input type="number" step="0.001" min="0" max="<?= h($maxKg) ?>" name="reject_qty[<?= h((string) $lot['id']) ?>]" value="0.000" data-factory-reject-qty>
                                 </label>
                             </td>
                             <td>
@@ -94,7 +113,7 @@ $shrinkagePct = $selectedProcessor ? (float) $selectedProcessor['exchange_shrink
                     <?php endforeach; ?>
                     <?php if (!$data['lots']): ?>
                         <tr>
-                            <td colspan="7" class="empty">Nu exista loturi in validare sau acceptate pentru procesatorul selectat.</td>
+                            <td colspan="8" class="empty">Nu exista loturi cu ceara disponibila pentru procesatorul selectat.</td>
                         </tr>
                     <?php endif; ?>
                 </tbody>

@@ -191,6 +191,14 @@ foreach ($data['stores'] as $store) {
             <input type="hidden" name="store_id" value="0">
             <label>Cod <input name="store_code" required placeholder="GEST2"></label>
             <label>Denumire <input name="store_name" required placeholder="Magazin nou"></label>
+            <label>
+                Procesator asignat
+                <select name="store_processor_id" required>
+                    <?php foreach ($data['processors'] as $processor): ?>
+                        <option value="<?= h((string) $processor['id']) ?>"><?= h($processor['name']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </label>
             <label class="wide">Adresa <input name="store_address"></label>
             <button class="primary" type="submit">Adauga gestiune</button>
         </form>
@@ -206,6 +214,16 @@ foreach ($data['stores'] as $store) {
                     <label>Cod <input name="store_code" value="<?= h($store['code']) ?>" required></label>
                     <label>Denumire <input name="store_name" value="<?= h($store['name']) ?>" required></label>
                     <label>Adresa <input name="store_address" value="<?= h($store['address']) ?>"></label>
+                    <label>
+                        Procesator
+                        <select name="store_processor_id" required>
+                            <?php foreach ($data['processors'] as $processor): ?>
+                                <option value="<?= h((string) $processor['id']) ?>" <?= (int) $processor['id'] === (int) ($store['processor_id'] ?? 0) ? 'selected' : '' ?>>
+                                    <?= h($processor['name']) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </label>
                     <button class="small" type="submit">Salveaza</button>
                 </form>
             <?php endforeach; ?>

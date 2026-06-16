@@ -20,6 +20,7 @@ temp/
 !.env.example
 config/local.php
 config/secrets.php
+config/xampp-target.local.txt
 
 # Dependencies / build output
 node_modules/

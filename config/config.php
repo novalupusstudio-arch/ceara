@@ -2,7 +2,7 @@
 
 return [
     'app_name' => 'Ceara',
-    'app_version' => '1.0.006',
+    'app_version' => '1.0.009',
     'db' => [
         'host' => getenv('CEARA_DB_HOST') ?: '127.0.0.1',
         'port' => getenv('CEARA_DB_PORT') ?: '3306',
