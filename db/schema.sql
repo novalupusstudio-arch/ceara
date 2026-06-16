@@ -228,6 +228,17 @@ CREATE TABLE IF NOT EXISTS document_templates (
     FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS company_settings (
+    id TINYINT PRIMARY KEY,
+    company_name VARCHAR(160) NOT NULL DEFAULT '',
+    vat_number VARCHAR(40) NOT NULL DEFAULT '',
+    registry_number VARCHAR(80) NOT NULL DEFAULT '',
+    address VARCHAR(255) NOT NULL DEFAULT '',
+    updated_by INT NULL,
+    updated_at TIMESTAMP NULL,
+    FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS inventory_transactions (
     id INT AUTO_INCREMENT PRIMARY KEY,
     movement_type VARCHAR(80) NOT NULL,

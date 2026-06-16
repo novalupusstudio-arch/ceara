@@ -40,6 +40,8 @@ The system is built around lot traceability, simple local deployment through XAM
 ### Settings Flow
 
 - Change own password.
+- Initial admin can edit company data used in document templates.
+- Admin can edit HTML document templates and preview them with sample data.
 - Admin initial can manage role permissions.
 - Admin initial can create users.
 - Admin and operators can have store assignments based on permissions.
@@ -112,7 +114,7 @@ Operators can:
 
 ## Document Types
 
-Mock document types currently in the app:
+Document types currently in the app:
 
 - `PV-CUST` - custody intake / preluare
 - `FACT` - invoice
@@ -124,13 +126,17 @@ Mock document types currently in the app:
 
 Notes:
 
-- Processing lot documents are mocked for now.
-- Factory delivery batches generate mock `AVIZ` and `NIR`.
+- `PV-CUST` is generated from an editable HTML template through Dompdf.
+- Generated PDFs are saved to `storage/documents/<store_code>/` and opened inline in the browser.
+- Document templates are stored in `document_templates`.
+- Company template variables come from `company_settings`.
+- Factory delivery batches still generate document records for `AVIZ` and `NIR`.
 - Purchase flow uses `BORD` or `FACT` plus `NIR`.
 
 ## Current Architecture
 
 - Plain PHP, no framework
+- Dompdf is bundled in `vendor/` and committed to Git so PC2/server deployments do not need Composer.
 - Server-rendered pages
 - MySQL persistence
 - XAMPP for local runtime
@@ -139,12 +145,12 @@ Notes:
 - Styling in `assets/styles.css`
 - Small client-side behavior in `assets/app.js`
 - Schema + lightweight migrations in `db/schema.sql` and `lib/Database.php`
-- Source of truth lives in `E:\NovaLupus\ceara`
-- Local deployment copy syncs to `E:\XAMP\htdocs\ceara`
+- Source of truth lives in the local Git clone, currently `D:\Novalupusstudio\ceara`
+- Local deployment copy syncs to the per-machine path in `config/xampp-target.local.txt`
 
 Current app version in config:
 
-- `1.0.009`
+- `1.0.012`
 
 ## Processing Refactor Note
 
@@ -247,10 +253,17 @@ or returned to the assigned processor. Each buffer entry is append-only:
 
 ## Document Links
 
-Documents are still mock records. Links currently open
-`index.php?page=document_mock&document_id=...`, which displays a simple text
-placeholder. Later, generated PDF files will be saved to disk and the same
-document links should open/print those PDFs.
+Documents are stored as rows in `documents`. For document types with an active
+template, opening `index.php?page=document_mock&document_id=...` regenerates or
+serves the saved PDF from disk and returns it inline as `application/pdf`.
+
+`PV-CUST` currently has an editable template and is generated through Dompdf.
+The PDF is saved under `storage/documents/<store_code>/`. The storage folder is
+ignored by Git because it contains runtime artifacts.
+
+During template tuning, pressing `Print PV` should regenerate from the current
+template so edits are visible. Later fiscal behavior may need immutable issued
+documents plus separate preview/regeneration controls.
 
 ## Important Business Rules
 
@@ -263,5 +276,6 @@ document links should open/print those PDFs.
 - Batch quantities can be edited per lot before submission.
 - Inventory values should not mix custody stock with company-owned stock.
 - Documents are generated as mock records now and are intended to be replaceable later with real integrations.
+- PV custody documents are generated as PDF files from editable templates.
 - Audit logging is append-only for sensitive operations.
 - The local sync script is the expected deployment path during development.

@@ -2,7 +2,7 @@
 
 $config = [
     'app_name' => 'Ceara',
-    'app_version' => '1.0.011',
+    'app_version' => '1.0.012',
     'seed_defaults' => getenv('CEARA_SEED_DEFAULTS') !== '0',
     'db' => [
         'host' => getenv('CEARA_DB_HOST') ?: '127.0.0.1',

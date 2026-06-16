@@ -287,6 +287,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect('settings', ['settings_tab' => 'document_templates']);
         }
 
+        if ($action === 'save_company_settings') {
+            if (!is_initial_admin()) {
+                throw new RuntimeException('Doar adminul initial poate edita datele societatii.');
+            }
+            $app->saveCompanySettings([
+                'company_name' => post_string('company_name'),
+                'vat_number' => post_string('vat_number'),
+                'registry_number' => post_string('registry_number'),
+                'address' => post_string('address'),
+            ], $user['id']);
+            flash('Datele societatii au fost salvate.');
+            redirect('settings', ['settings_tab' => 'company']);
+        }
+
         if ($action === 'save_settings') {
             $app->saveSettings([
                 'store_id' => post_int('store_id'),

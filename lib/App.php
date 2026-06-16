@@ -823,6 +823,7 @@ final class App
             'users' => $this->users(),
             'user_stores' => $this->userStores(),
             'document_templates' => $this->documentTemplates(),
+            'company_settings' => $this->companySettings(),
             'series' => $this->pdo->query(
                 'SELECT ds.*, s.name AS store_name FROM document_series ds JOIN stores s ON s.id = ds.store_id ORDER BY s.name, ds.document_type'
             )->fetchAll(),
@@ -1021,6 +1022,46 @@ final class App
             $this->pdo->rollBack();
             throw $error;
         }
+    }
+
+    public function companySettings(): array
+    {
+        $settings = $this->pdo->query('SELECT * FROM company_settings WHERE id = 1 LIMIT 1')->fetch();
+        if (!$settings) {
+            $this->pdo->prepare('INSERT INTO company_settings (id) VALUES (1)')->execute();
+            $settings = $this->pdo->query('SELECT * FROM company_settings WHERE id = 1 LIMIT 1')->fetch();
+        }
+
+        return $settings ?: [
+            'company_name' => '',
+            'vat_number' => '',
+            'registry_number' => '',
+            'address' => '',
+        ];
+    }
+
+    public function saveCompanySettings(array $data, int $userId): void
+    {
+        $this->pdo->prepare(
+            'INSERT INTO company_settings
+            (id, company_name, vat_number, registry_number, address, updated_by, updated_at)
+            VALUES (1, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON DUPLICATE KEY UPDATE
+                company_name = VALUES(company_name),
+                vat_number = VALUES(vat_number),
+                registry_number = VALUES(registry_number),
+                address = VALUES(address),
+                updated_by = VALUES(updated_by),
+                updated_at = CURRENT_TIMESTAMP'
+        )->execute([
+            trim((string) ($data['company_name'] ?? '')),
+            trim((string) ($data['vat_number'] ?? '')),
+            trim((string) ($data['registry_number'] ?? '')),
+            trim((string) ($data['address'] ?? '')),
+            $userId,
+        ]);
+
+        $this->logAudit($userId, 'COMPANY_SETTINGS_UPDATE', 'company_settings', 1, null, 'updated');
     }
 
     public function roleHasPermission(string $role, string $permission): bool
@@ -1283,13 +1324,14 @@ final class App
 
     private function documentVariables(array $doc, array $store): array
     {
+        $company = $this->companySettings();
         $variables = [
             'document_number' => $this->formatDocumentLabel($doc),
             'document_date' => date('Y-m-d', strtotime((string) ($doc['created_at'] ?? 'now'))),
-            'company_name' => '',
-            'company_vat_number' => '',
-            'company_registry_number' => '',
-            'company_address' => '',
+            'company_name' => (string) ($company['company_name'] ?? ''),
+            'company_vat_number' => (string) ($company['vat_number'] ?? ''),
+            'company_registry_number' => (string) ($company['registry_number'] ?? ''),
+            'company_address' => (string) ($company['address'] ?? ''),
             'store_name' => (string) ($store['name'] ?? ''),
             'store_address' => (string) ($store['address'] ?? ''),
             'operator_name' => '',

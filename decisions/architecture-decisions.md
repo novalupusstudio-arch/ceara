@@ -53,15 +53,19 @@ Rejected alternatives:
 - Storing kilograms as decimals, which would create rounding risk.
 - Mixing presentation units with storage units, which would complicate inventory math.
 
-### 6. Mock documents for the MVP
+### 6. DB document records plus generated PDFs
 
-- Chosen because document numbering, layouts, and third-party integrations are still being defined.
-- This keeps the workflow testable without blocking on external APIs.
+- Chosen because document numbering and third-party integrations are still being defined, but PDF output is already needed for local testing.
+- Document rows remain in DB as the durable reference.
+- `PV-CUST` is generated from an editable HTML template through Dompdf.
+- Generated files are saved under `storage/documents/<store_code>/` and opened inline from the document endpoint.
+- Other document types may still be placeholder records until their templates are defined.
 
 Rejected alternatives:
 
 - Integrating real third-party document services immediately.
-- Deferring all document handling until production readiness.
+- Deferring all document rendering until production readiness.
+- Relying on Composer at install time. `vendor/` is intentionally committed so PC2/server deployments are self-contained.
 
 ### 7. Processing and factory delivery are separate flows
 

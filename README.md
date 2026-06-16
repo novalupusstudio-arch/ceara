@@ -20,6 +20,7 @@ Web application project workspace.
 ## MVP Stack
 
 - PHP + MySQL
+- Dompdf bundled in `vendor/` for PDF generation
 - XAMPP local runtime
 - Server-rendered pages with small JavaScript helpers
 
@@ -37,6 +38,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\sync-to-xampp.ps1
 `http://localhost/ceara/`
 
 The app creates the `ceara` database and seeds baseline data automatically when MySQL is available.
+
+Composer is not required to run the app on another PC because `vendor/` is
+committed intentionally. `composer.json` and `composer.lock` remain available
+for future dependency maintenance.
 
 Default credentials:
 
@@ -59,6 +64,8 @@ Production packaging and database initialization are documented in
 - generated mock documents
 - reports
 - settings for store, processor, and document series
+- settings for company data and editable document templates
+- Dompdf-generated PDF for `PV-CUST`
 - audit log
 
 Quantities are stored as integer grams and displayed as kilograms with three decimals.

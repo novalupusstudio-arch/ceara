@@ -226,6 +226,21 @@ final class Database
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
             );
         }
+
+        if (!$pdo->query("SHOW TABLES LIKE 'company_settings'")->fetchColumn()) {
+            $pdo->exec(
+                "CREATE TABLE company_settings (
+                    id TINYINT PRIMARY KEY,
+                    company_name VARCHAR(160) NOT NULL DEFAULT '',
+                    vat_number VARCHAR(40) NOT NULL DEFAULT '',
+                    registry_number VARCHAR(80) NOT NULL DEFAULT '',
+                    address VARCHAR(255) NOT NULL DEFAULT '',
+                    updated_by INT NULL,
+                    updated_at TIMESTAMP NULL,
+                    FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+            );
+        }
     }
 
     private function seed(PDO $pdo): void
@@ -264,6 +279,8 @@ final class Database
             $pdo->prepare('INSERT IGNORE INTO role_permissions (role_name, permission_code, allowed) VALUES (?, ?, ?)')
                 ->execute(['operator', $code, in_array($code, $operatorDefaults, true) ? 1 : 0]);
         }
+
+        $pdo->prepare('INSERT IGNORE INTO company_settings (id) VALUES (1)')->execute();
 
         $this->seedDocumentTemplates($pdo);
 
@@ -406,6 +423,42 @@ final class Database
                     'generated_at',
                 ],
                 'body_html' => <<<'HTML'
+<style>
+  body {
+    font-family: DejaVu Sans, sans-serif;
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  h2 {
+    font-size: 16px;
+    margin: 0 0 8px;
+  }
+
+  h3 {
+    font-size: 13px;
+    margin: 14px 0 6px;
+  }
+
+  p {
+    margin: 6px 0;
+  }
+
+  ul {
+    margin: 6px 0 8px 18px;
+    padding: 0;
+  }
+
+  li {
+    margin-bottom: 4px;
+  }
+
+  table {
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+</style>
+
 <h2 style="text-align:center;">
   PROCES-VERBAL DE PREDARE IN CUSTODIE CEARA BRUTA
 </h2>

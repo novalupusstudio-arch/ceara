@@ -65,10 +65,16 @@ Operator can:
 - fiscal code / CUI
 - trade registry number
 - address
-- bank
-- IBAN
-- phone
-- email
+
+Current implemented MVP fields:
+
+- society name
+- CUI
+- trade registry number
+- address
+
+These are edited in `Setari > Date societate` by the initial admin and are used
+by document template variables.
 
 ### Stores
 
@@ -180,7 +186,11 @@ location should be represented as separate stores.
 
 ### Fiscal Output
 
-- Documents are mock records for now.
+- Documents are stored as DB records.
+- Document HTML templates are stored in `document_templates`.
+- `PV-CUST` is generated from its HTML template using Dompdf.
+- Generated PDF files are saved under `storage/documents/<store_code>/`.
+- PDFs open inline in a new browser tab from the document endpoint.
 - Future integrations will replace the mock layer later.
 
 ## Inventory Model
@@ -263,8 +273,9 @@ Audit records are append-only and must not be deleted.
 - Database: MySQL
 - Local runtime: XAMPP
 - Frontend: server-rendered PHP with light JavaScript helpers
-- Source workspace: `E:\NovaLupus\ceara`
-- XAMPP test copy: `E:\XAMP\htdocs\ceara`
+- PDF generation: Dompdf, bundled in committed `vendor/`
+- Source workspace: local Git clone, currently `D:\Novalupusstudio\ceara`
+- XAMPP test copy: configured locally in `config/xampp-target.local.txt`
 
 ## Database Direction
 
@@ -283,6 +294,8 @@ Main tables include:
 - `factory_batch_items`
 - `purchase_lots`
 - `documents`
+- `document_templates`
+- `company_settings`
 - `inventory_transactions`
 - `audit_log`
 
@@ -292,3 +305,4 @@ Main tables include:
 - Whether batch history needs dedicated screens.
 - Whether more detailed per-lot delivery auditing is needed.
 - How strict password change enforcement should be for new users.
+- Whether issued PDFs become immutable once printed or remain regenerable during MVP.

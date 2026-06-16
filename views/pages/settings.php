@@ -7,6 +7,7 @@ $canManageProcessors = (bool) ($rolePermissions[$currentRole]['PROCESSOR_MANAGE'
 $canManageDocumentTemplates = (bool) ($rolePermissions[$currentRole]['DOCUMENT_TEMPLATE_MANAGE'] ?? false);
 $availableTabs = ['password' => 'Schimba parola'];
 if ($canManageSecurity) {
+    $availableTabs['company'] = 'Date societate';
     $availableTabs['roles'] = 'Roluri si drepturi';
     $availableTabs['users'] = 'Creare useri';
 }
@@ -60,6 +61,33 @@ foreach ($data['stores'] as $store) {
                 <input type="password" name="confirm_password" autocomplete="new-password" required>
             </label>
             <button class="primary" type="submit">Schimba parola</button>
+        </form>
+    </section>
+<?php endif; ?>
+
+<?php if ($activeTab === 'company' && $canManageSecurity): ?>
+    <?php $company = $data['company_settings'] ?? []; ?>
+    <section class="panel">
+        <h2>Date societate</h2>
+        <form method="post" class="form-grid">
+            <input type="hidden" name="action" value="save_company_settings">
+            <label>
+                Societate
+                <input name="company_name" value="<?= h((string) ($company['company_name'] ?? '')) ?>">
+            </label>
+            <label>
+                CUI
+                <input name="vat_number" value="<?= h((string) ($company['vat_number'] ?? '')) ?>">
+            </label>
+            <label>
+                Nr. Reg. Com.
+                <input name="registry_number" value="<?= h((string) ($company['registry_number'] ?? '')) ?>">
+            </label>
+            <label class="wide">
+                Sediu
+                <input name="address" value="<?= h((string) ($company['address'] ?? '')) ?>">
+            </label>
+            <button class="primary" type="submit">Salveaza datele societatii</button>
         </form>
     </section>
 <?php endif; ?>
