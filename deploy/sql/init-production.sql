@@ -56,10 +56,49 @@ CREATE TABLE IF NOT EXISTS customers (
     name VARCHAR(160) NOT NULL,
     phone VARCHAR(80) NOT NULL DEFAULT '',
     address VARCHAR(255) NOT NULL DEFAULT '',
+    identifier VARCHAR(40) NOT NULL DEFAULT '',
     cui VARCHAR(40) NOT NULL DEFAULT '',
     representative VARCHAR(160) NOT NULL DEFAULT '',
+    county_code VARCHAR(10) NOT NULL DEFAULT '',
+    county_name VARCHAR(80) NOT NULL DEFAULT '',
+    locality_siruta INT NULL,
+    locality_name VARCHAR(160) NOT NULL DEFAULT '',
+    postal_code VARCHAR(20) NOT NULL DEFAULT '',
+    registry_number VARCHAR(80) NOT NULL DEFAULT '',
+    legal_form VARCHAR(40) NOT NULL DEFAULT '',
+    vat_status VARCHAR(80) NOT NULL DEFAULT '',
+    external_source VARCHAR(40) NOT NULL DEFAULT '',
+    external_checked_at TIMESTAMP NULL,
     known_customer TINYINT(1) NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS siruta_counties (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    county_code VARCHAR(10) NOT NULL UNIQUE,
+    siruta_code INT NOT NULL,
+    name VARCHAR(80) NOT NULL,
+    normalized_name VARCHAR(80) NOT NULL,
+    INDEX idx_county_name (normalized_name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS siruta_localities (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    siruta_code INT NOT NULL UNIQUE,
+    county_code VARCHAR(10) NOT NULL,
+    name VARCHAR(160) NOT NULL,
+    normalized_name VARCHAR(160) NOT NULL,
+    display_name VARCHAR(220) NOT NULL,
+    postal_code VARCHAR(20) NOT NULL DEFAULT '',
+    parent_siruta INT NULL,
+    parent_name VARCHAR(160) NOT NULL DEFAULT '',
+    parent_type VARCHAR(40) NOT NULL DEFAULT '',
+    type_code INT NOT NULL DEFAULT 0,
+    level_no INT NOT NULL DEFAULT 0,
+    duplicate_name_in_county TINYINT(1) NOT NULL DEFAULT 0,
+    INDEX idx_locality_county_name (county_code, normalized_name),
+    INDEX idx_locality_parent (parent_siruta),
+    FOREIGN KEY (county_code) REFERENCES siruta_counties(county_code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS suppliers (
@@ -202,6 +241,8 @@ CREATE TABLE IF NOT EXISTS documents (
     reference_type VARCHAR(60) NOT NULL,
     reference_id INT NOT NULL,
     status VARCHAR(40) NOT NULL DEFAULT 'draft',
+    file_path VARCHAR(255) NULL,
+    external_url VARCHAR(500) NULL,
     notes TEXT NULL,
     created_by INT NULL,
     printed_at TIMESTAMP NULL,
@@ -223,6 +264,17 @@ CREATE TABLE IF NOT EXISTS document_templates (
     active TINYINT(1) NOT NULL DEFAULT 1,
     updated_by INT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NULL,
+    FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS company_settings (
+    id TINYINT PRIMARY KEY,
+    company_name VARCHAR(160) NOT NULL DEFAULT '',
+    vat_number VARCHAR(40) NOT NULL DEFAULT '',
+    registry_number VARCHAR(80) NOT NULL DEFAULT '',
+    address VARCHAR(255) NOT NULL DEFAULT '',
+    updated_by INT NULL,
     updated_at TIMESTAMP NULL,
     FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -298,116 +350,5 @@ INSERT INTO role_permissions (role_name, permission_code, allowed) VALUES
 ('operator', 'REPORT_VIEW', 1),
 ('operator', 'AUDIT_VIEW', 0)
 ON DUPLICATE KEY UPDATE allowed = VALUES(allowed);
-
-INSERT INTO document_templates (code, name, description, body_html, variables_json, active) VALUES
-('PV-CUST', 'PV primire ceara bruta in custodie', 'Proces-verbal pentru luarea in custodie a cerii brute de la client.', '<h2 style="text-align:center;">
-  PROCES-VERBAL DE PREDARE IN CUSTODIE CEARA BRUTA
-</h2>
-
-<p style="text-align:center;">
-  pentru serviciul de procesare ceara
-</p>
-
-<p>
-  <strong>Nr.:</strong> [document_number] &nbsp;&nbsp;
-  <strong>Data:</strong> [document_date]
-</p>
-
-<h3>1. Date prestator</h3>
-
-<p>
-  <strong>Societate:</strong> [company_name]<br>
-  <strong>CUI:</strong> [company_vat_number]<br>
-  <strong>Nr. Reg. Com.:</strong> [company_registry_number]<br>
-  <strong>Sediu:</strong> [company_address]<br>
-  <strong>Punct de lucru / gestiune:</strong> [store_name] - [store_address]
-</p>
-
-<p>
-  Reprezentata prin operator / gestionar: <strong>[operator_name]</strong>
-</p>
-
-<h3>2. Date client</h3>
-
-<p>
-  <strong>Nume / Denumire:</strong> [customer_name]<br>
-  <strong>CNP / CUI:</strong> [customer_identifier]<br>
-  <strong>Adresa / Localitate:</strong> [customer_address]<br>
-  <strong>Telefon:</strong> [customer_phone]<br>
-  <strong>Tip client:</strong> [customer_type]
-</p>
-
-<h3>3. Date lot</h3>
-
-<p>
-  <strong>Lot intern:</strong> [lot_number]<br>
-  <strong>Cantitate ceara bruta predata:</strong> [gross_wax_kg] kg<br>
-  <strong>Numar bucati / colete:</strong> [package_count]<br>
-  <strong>Observatii privind starea cerii:</strong><br>
-  [wax_observations]
-</p>
-
-<h3>4. Obiectul predarii</h3>
-
-<p>
-  Clientul preda societatii cantitatea de ceara bruta mentionata mai sus, in custodie,
-  in vederea prestarii serviciului de procesare ceara.
-</p>
-
-<p>
-  Predarea cerii nu reprezinta vanzare, achizitie, donatie sau transfer de proprietate catre societate.
-</p>
-
-<p>
-  Ceara bruta ramane in evidenta operationala a societatii ca bun primit in custodie
-  pentru executarea serviciului de procesare.
-</p>
-
-<h3>5. Conditii de procesare</h3>
-
-<p>Clientul ia la cunostinta ca:</p>
-
-<ul>
-  <li>societatea poate efectua schimbul imediat, din stocul operational de faguri, sau poate conditiona predarea fagurilor de verificarea prealabila a cerii;</li>
-  <li>cantitatea de faguri rezultata se calculeaza prin aplicarea scazamantului stabilit pentru serviciul de procesare;</li>
-  <li>serviciul se poate realiza in sistem de echivalent cantitativ si calitativ, fara obligatia restituirii fizice a exact aceleiasi mase de ceara;</li>
-  <li>ceara cu suspiciune de parafina, impuritati excesive, corpuri straine sau alte neconformitati poate fi refuzata;</li>
-  <li>ceara refuzata se poate restitui clientului pe baza de proces-verbal de predare ceara neacceptata.</li>
-</ul>
-
-<h3>6. Conditii generale</h3>
-
-<p>
-  Clientul declara ca a luat cunostinta si accepta
-  <strong>Conditiile Generale pentru Serviciul de Procesare Ceara</strong>
-  ale societatii, disponibile in punctul de lucru si/sau pe site-ul societatii.
-</p>
-
-<h3>7. Confirmare predare</h3>
-
-<p>
-  Prin semnarea prezentului proces-verbal, clientul confirma ca a predat cantitatea de ceara bruta
-  mentionata mai sus, iar operatorul confirma primirea acesteia in custodie.
-</p>
-
-<table style="width:100%; margin-top:40px;">
-  <tr>
-    <td style="width:50%; text-align:center;">
-      <strong>Client / Predator</strong><br><br>
-      Nume: [customer_name]<br><br>
-      Semnatura: ______________________
-    </td>
-    <td style="width:50%; text-align:center;">
-      <strong>Operator / Gestionar</strong><br><br>
-      Nume: [operator_name]<br><br>
-      Semnatura: ______________________
-    </td>
-  </tr>
-</table>
-
-<p style="font-size:10px; margin-top:30px;">
-  Document generat din aplicatia [app_name] la data [generated_at]. Cod document: [document_number]. Lot: [lot_number].
-</p>', '["document_number","document_date","company_name","company_vat_number","company_registry_number","company_address","store_name","store_address","operator_name","customer_name","customer_identifier","customer_address","customer_phone","customer_type","lot_number","gross_wax_kg","package_count","wax_observations","app_name","generated_at"]', 1)
-ON DUPLICATE KEY UPDATE code = code;
 
 COMMIT;
