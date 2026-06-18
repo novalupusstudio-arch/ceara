@@ -657,6 +657,16 @@ final class Database
         };
     }
 
+    private function templateFile(string $fileName): string
+    {
+        $path = __DIR__ . '/templates/' . $fileName;
+        $content = file_get_contents($path);
+        if ($content === false) {
+            throw new RuntimeException('Lipseste template-ul de document: ' . $fileName);
+        }
+        return $content;
+    }
+
     private function defaultDocumentTemplates(): array
     {
         return [
@@ -686,149 +696,7 @@ final class Database
                     'app_name',
                     'generated_at',
                 ],
-                'body_html' => <<<'HTML'
-<style>
-  body {
-    font-family: DejaVu Sans, sans-serif;
-    font-size: 11px;
-    line-height: 1.35;
-  }
-
-  h2 {
-    font-size: 16px;
-    margin: 0 0 8px;
-  }
-
-  h3 {
-    font-size: 13px;
-    margin: 14px 0 6px;
-  }
-
-  p {
-    margin: 6px 0;
-  }
-
-  ul {
-    margin: 6px 0 8px 18px;
-    padding: 0;
-  }
-
-  li {
-    margin-bottom: 4px;
-  }
-
-  table {
-    border-collapse: collapse;
-    font-size: 11px;
-  }
-</style>
-
-<h2 style="text-align:center;">
-  PROCES-VERBAL DE PREDARE IN CUSTODIE CEARA BRUTA
-</h2>
-
-<p style="text-align:center;">
-  pentru serviciul de procesare ceara
-</p>
-
-<p>
-  <strong>Nr.:</strong> [document_number] &nbsp;&nbsp;
-  <strong>Data:</strong> [document_date]
-</p>
-
-<h3>1. Date prestator</h3>
-
-<p>
-  <strong>Societate:</strong> [company_name]<br>
-  <strong>CUI:</strong> [company_vat_number]<br>
-  <strong>Nr. Reg. Com.:</strong> [company_registry_number]<br>
-  <strong>Sediu:</strong> [company_address]<br>
-  <strong>Punct de lucru / gestiune:</strong> [store_name] - [store_address]
-</p>
-
-<p>
-  Reprezentata prin operator / gestionar: <strong>[operator_name]</strong>
-</p>
-
-<h3>2. Date client</h3>
-
-<p>
-  <strong>Nume / Denumire:</strong> [customer_name]<br>
-  <strong>CNP / CI / CUI:</strong> [customer_identifier]<br>
-  <strong>Adresa / Localitate:</strong> [customer_address]<br>
-  <strong>Telefon:</strong> [customer_phone]<br>
-  <strong>Tip client:</strong> [customer_type]
-</p>
-
-<h3>3. Date lot</h3>
-
-<p>
-  <strong>Lot intern:</strong> [lot_number]<br>
-  <strong>Cantitate ceara bruta predata:</strong> [gross_wax_kg]<br>
-  <strong>Numar bucati / colete:</strong> [package_count]<br>
-  <strong>Observatii privind starea cerii:</strong><br>
-  [wax_observations]
-</p>
-
-<h3>4. Obiectul predarii</h3>
-
-<p>
-  Clientul preda societatii cantitatea de ceara bruta mentionata mai sus, in custodie,
-  in vederea prestarii serviciului de procesare ceara.
-</p>
-
-<p>
-  Predarea cerii nu reprezinta vanzare, achizitie, donatie sau transfer de proprietate catre societate.
-</p>
-
-<p>
-  Ceara bruta ramane in evidenta operationala a societatii ca bun primit in custodie
-  pentru executarea serviciului de procesare.
-</p>
-
-<h3>5. Conditii de procesare</h3>
-
-<p>Clientul ia la cunostinta ca:</p>
-
-<ul>
-  <li>societatea poate efectua schimbul imediat, din stocul operational de faguri, sau poate conditiona predarea fagurilor de verificarea prealabila a cerii;</li>
-  <li>cantitatea de faguri rezultata se calculeaza prin aplicarea scazamantului stabilit pentru serviciul de procesare;</li>
-  <li>serviciul se poate realiza in sistem de echivalent cantitativ si calitativ, fara obligatia restituirii fizice a exact aceleiasi mase de ceara;</li>
-  <li>ceara cu suspiciune de parafina, impuritati excesive, corpuri straine sau alte neconformitati poate fi refuzata;</li>
-  <li>ceara refuzata se poate restitui clientului pe baza de proces-verbal de predare ceara neacceptata.</li>
-</ul>
-
-<h3>6. Conditii generale</h3>
-
-<p>
-  Clientul declara ca a luat cunostinta si accepta
-  <strong>Conditiile Generale pentru Serviciul de Procesare Ceara</strong>
-  ale societatii, disponibile in punctul de lucru si/sau pe site-ul societatii.
-</p>
-
-<h3>7. Confirmare predare</h3>
-
-<p>
-  Prin semnarea prezentului proces-verbal, clientul confirma ca a predat cantitatea de ceara bruta
-  mentionata mai sus, iar operatorul confirma primirea acesteia in custodie.
-</p>
-
-<table style="width:100%; margin-top:40px;">
-  <tr>
-    <td style="width:50%; text-align:center;">
-      <strong>Client / Predator</strong><br><br>
-      Nume: [customer_name]<br><br>
-      Semnatura: ______________________
-    </td>
-    <td style="width:50%; text-align:center;">
-      <strong>Operator / Gestionar</strong><br><br>
-      Nume: [operator_name]<br><br>
-      Semnatura: ______________________
-    </td>
-  </tr>
-</table>
-
-HTML,
+                'body_html' => $this->templateFile('pv-cust.html'),
             ],
             [
                 'code' => 'PV-FAG',

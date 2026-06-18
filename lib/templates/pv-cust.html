@@ -1,0 +1,238 @@
+<style>
+  @page {
+    size: A4;
+    margin: 12mm 10mm 10mm 10mm;
+  }
+
+  body {
+    font-family: DejaVu Sans, sans-serif;
+    font-size: 10px;
+    color: #000;
+    line-height: 1.18;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10px;
+  }
+
+  p {
+    margin: 4px 0;
+  }
+
+  ul {
+    margin: 3px 0 0 13px;
+    padding: 0;
+  }
+
+  li {
+    margin-bottom: 2px;
+  }
+
+  .header-table td {
+    vertical-align: top;
+  }
+
+  .company-name {
+    font-size: 13px;
+    font-weight: bold;
+    text-transform: uppercase;
+  }
+
+  .doc-box {
+    border: 1px solid #000;
+    padding: 5px;
+    text-align: center;
+  }
+
+  .document-title {
+    text-align: center;
+    font-size: 14px;
+    font-weight: bold;
+    margin: 9px 0 2px;
+    text-transform: uppercase;
+  }
+
+  .document-subtitle {
+    text-align: center;
+    margin-bottom: 7px;
+  }
+
+  .info-table td,
+  .items-table th,
+  .items-table td {
+    border: 1px solid #000;
+    padding: 4px;
+    vertical-align: top;
+  }
+
+  .label,
+  .items-table th {
+    font-weight: bold;
+    background: #f2f2f2;
+  }
+
+  .label {
+    width: 18%;
+  }
+
+  .section-title {
+    font-size: 11px;
+    font-weight: bold;
+    margin: 7px 0 3px;
+  }
+
+  .legal-box {
+    border: 1px solid #000;
+    padding: 5px;
+    margin-top: 5px;
+  }
+
+  .gdpr-box {
+    border: 1px solid #000;
+    padding: 5px;
+    margin-top: 5px;
+    font-size: 9px;
+    line-height: 1.12;
+  }
+
+  .sign-table {
+    margin-top: 12px;
+  }
+
+  .sign-table td {
+    width: 50%;
+    text-align: center;
+    vertical-align: top;
+  }
+
+  .signature-line {
+    margin-top: 24px;
+    border-top: 1px solid #000;
+    display: inline-block;
+    width: 78%;
+    padding-top: 3px;
+  }
+</style>
+
+<table class="header-table">
+  <tr>
+    <td style="width:70%;">
+      <div class="company-name">[company_name]</div>
+      CUI: [company_vat_number]<br>
+      Nr. Reg. Com.: [company_registry_number]<br>
+      [company_address]<br>
+      Gestiune: [store_name]<br>
+      [store_address]
+    </td>
+    <td style="width:30%;">
+      <div class="doc-box">
+        <strong>PV-CUST</strong><br>
+        Nr. [document_number]<br>
+        Data: [document_date]
+      </div>
+    </td>
+  </tr>
+</table>
+
+<div class="document-title">Proces-verbal de predare in custodie ceara bruta</div>
+<div class="document-subtitle">pentru serviciul de procesare ceara</div>
+
+<table class="info-table">
+  <tr>
+    <td class="label">Prestator</td>
+    <td>[company_name]</td>
+    <td class="label">Operator</td>
+    <td>[operator_name]</td>
+  </tr>
+  <tr>
+    <td class="label">Client</td>
+    <td>[customer_name]</td>
+    <td class="label">Tip client</td>
+    <td>[customer_type]</td>
+  </tr>
+  <tr>
+    <td class="label">CNP / CI / CUI</td>
+    <td>[customer_identifier]</td>
+    <td class="label">Telefon</td>
+    <td>[customer_phone]</td>
+  </tr>
+  <tr>
+    <td class="label">Adresa / Localitate</td>
+    <td colspan="3">[customer_address]</td>
+  </tr>
+</table>
+
+<table class="items-table" style="margin-top:7px;">
+  <tr>
+    <th>Lot intern</th>
+    <th>Cantitate ceara bruta predata</th>
+    <th>Numar bucati / colete</th>
+    <th>Observatii privind starea cerii</th>
+  </tr>
+  <tr>
+    <td>[lot_number]</td>
+    <td>[gross_wax_kg]</td>
+    <td>[package_count]</td>
+    <td>[wax_observations]</td>
+  </tr>
+</table>
+
+<div class="section-title">Obiectul predarii</div>
+<table class="info-table">
+  <tr>
+    <td>
+      Clientul preda societatii cantitatea de ceara bruta mentionata mai sus, in custodie, in vederea prestarii serviciului de procesare ceara.
+      Predarea cerii nu reprezinta vanzare, achizitie, donatie sau transfer de proprietate catre societate.
+      Ceara bruta ramane in evidenta operationala a societatii ca bun primit in custodie pentru executarea serviciului de procesare.
+    </td>
+  </tr>
+</table>
+
+<div class="section-title">Conditii de procesare</div>
+<div class="legal-box">
+  Clientul ia la cunostinta ca:
+  <ul>
+    <li>societatea poate efectua schimbul imediat, din stocul operational de faguri, sau poate conditiona predarea fagurilor de verificarea prealabila a cerii;</li>
+    <li>cantitatea de faguri rezultata se calculeaza prin aplicarea scazamantului stabilit pentru serviciul de procesare;</li>
+    <li>serviciul se poate realiza in sistem de echivalent cantitativ si calitativ, fara obligatia restituirii fizice a exact aceleiasi mase de ceara;</li>
+    <li>ceara cu suspiciune de parafina, impuritati excesive, corpuri straine sau alte neconformitati poate fi refuzata;</li>
+    <li>ceara refuzata se poate restitui clientului pe baza de proces-verbal de predare ceara neacceptata.</li>
+  </ul>
+</div>
+
+<div class="section-title">Conditii generale si confirmare predare</div>
+<table class="info-table">
+  <tr>
+    <td>
+      Clientul declara ca a luat cunostinta si accepta <strong>Conditiile Generale pentru Serviciul de Procesare Ceara</strong>
+      ale societatii, disponibile in punctul de lucru si/sau pe site-ul societatii.
+      Prin semnarea prezentului proces-verbal, clientul confirma ca a predat cantitatea de ceara bruta mentionata mai sus,
+      iar operatorul confirma primirea acesteia in custodie.
+    </td>
+  </tr>
+</table>
+
+<div class="gdpr-box">
+  <strong>Informare privind prelucrarea datelor cu caracter personal</strong><br>
+  Datele furnizate in prezentul document sunt prelucrate de [company_name] exclusiv in scopul prestarii serviciilor de procesare ceara,
+  emiterii documentelor comerciale si fiscale si indeplinirii obligatiilor legale. Datele sunt pastrate pe perioada prevazuta de legislatia aplicabila.
+  Persoana vizata beneficiaza de drepturile prevazute de Regulamentul (UE) 2016/679 (GDPR).
+  Prin semnarea prezentului document, clientul confirma ca a luat la cunostinta aceasta informare.
+</div>
+
+<table class="sign-table">
+  <tr>
+    <td>
+      <strong>Client / Predator</strong><br>
+      Nume: [customer_name]<br>
+      <span class="signature-line">Semnatura</span>
+    </td>
+    <td>
+      <strong>Operator / Gestionar</strong><br>
+      Nume: [operator_name]<br>
+      <span class="signature-line">Semnatura</span>
+    </td>
+  </tr>
+</table>
