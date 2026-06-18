@@ -252,6 +252,10 @@ final class Database
                     registry_number VARCHAR(80) NOT NULL DEFAULT '',
                     address VARCHAR(255) NOT NULL DEFAULT '',
                     fgo_private_key VARCHAR(255) NOT NULL DEFAULT '',
+                    purchase_default_shrinkage_pct DECIMAL(6,3) NOT NULL DEFAULT 0,
+                    purchase_default_price_cents_per_kg INT NOT NULL DEFAULT 0,
+                    purchase_factory_shrinkage_pct DECIMAL(6,3) NOT NULL DEFAULT 0,
+                    purchase_factory_price_cents_per_kg INT NOT NULL DEFAULT 0,
                     updated_by INT NULL,
                     updated_at TIMESTAMP NULL,
                     FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
@@ -260,6 +264,105 @@ final class Database
         }
         if (!$pdo->query("SHOW COLUMNS FROM company_settings LIKE 'fgo_private_key'")->fetch()) {
             $pdo->exec("ALTER TABLE company_settings ADD fgo_private_key VARCHAR(255) NOT NULL DEFAULT '' AFTER address");
+        }
+        $companyColumns = [
+            'purchase_default_shrinkage_pct' => "ALTER TABLE company_settings ADD purchase_default_shrinkage_pct DECIMAL(6,3) NOT NULL DEFAULT 0 AFTER fgo_private_key",
+            'purchase_default_price_cents_per_kg' => "ALTER TABLE company_settings ADD purchase_default_price_cents_per_kg INT NOT NULL DEFAULT 0 AFTER purchase_default_shrinkage_pct",
+            'purchase_factory_shrinkage_pct' => "ALTER TABLE company_settings ADD purchase_factory_shrinkage_pct DECIMAL(6,3) NOT NULL DEFAULT 0 AFTER purchase_default_price_cents_per_kg",
+            'purchase_factory_price_cents_per_kg' => "ALTER TABLE company_settings ADD purchase_factory_price_cents_per_kg INT NOT NULL DEFAULT 0 AFTER purchase_factory_shrinkage_pct",
+        ];
+        foreach ($companyColumns as $name => $sql) {
+            if (!$pdo->query("SHOW COLUMNS FROM company_settings LIKE '$name'")->fetch()) {
+                $pdo->exec($sql);
+            }
+        }
+
+        if ($pdo->query("SHOW TABLES LIKE 'suppliers'")->fetchColumn()) {
+            $pdo->exec("UPDATE suppliers SET supplier_type = 'PJ/PFA' WHERE supplier_type = 'PFA/SRL'");
+            $pdo->exec("ALTER TABLE suppliers MODIFY supplier_type ENUM('PF', 'Producator agricol', 'PJ/PFA') NOT NULL");
+            $supplierColumns = [
+                'phone' => "ALTER TABLE suppliers ADD phone VARCHAR(80) NOT NULL DEFAULT '' AFTER supplier_type",
+                'identifier' => "ALTER TABLE suppliers ADD identifier VARCHAR(40) NOT NULL DEFAULT '' AFTER phone",
+                'address' => "ALTER TABLE suppliers ADD address VARCHAR(255) NOT NULL DEFAULT '' AFTER cui",
+                'county_code' => "ALTER TABLE suppliers ADD county_code VARCHAR(10) NOT NULL DEFAULT '' AFTER address",
+                'county_name' => "ALTER TABLE suppliers ADD county_name VARCHAR(80) NOT NULL DEFAULT '' AFTER county_code",
+                'locality_siruta' => "ALTER TABLE suppliers ADD locality_siruta INT NULL AFTER county_name",
+                'locality_name' => "ALTER TABLE suppliers ADD locality_name VARCHAR(160) NOT NULL DEFAULT '' AFTER locality_siruta",
+                'postal_code' => "ALTER TABLE suppliers ADD postal_code VARCHAR(20) NOT NULL DEFAULT '' AFTER locality_name",
+            ];
+            foreach ($supplierColumns as $name => $sql) {
+                if (!$pdo->query("SHOW COLUMNS FROM suppliers LIKE '$name'")->fetch()) {
+                    $pdo->exec($sql);
+                }
+            }
+        }
+
+        if ($pdo->query("SHOW TABLES LIKE 'purchase_lots'")->fetchColumn()) {
+            $pdo->exec("UPDATE purchase_lots SET supplier_type = 'PJ/PFA' WHERE supplier_type = 'PFA/SRL'");
+            $purchaseColumns = [
+                'purchase_date' => "ALTER TABLE purchase_lots ADD purchase_date DATE NULL AFTER status",
+                'external_document_type' => "ALTER TABLE purchase_lots ADD external_document_type ENUM('borderou', 'carnet', 'factura') NOT NULL DEFAULT 'borderou' AFTER purchase_date",
+                'external_document_series' => "ALTER TABLE purchase_lots ADD external_document_series VARCHAR(80) NOT NULL DEFAULT '' AFTER external_document_type",
+                'external_document_number' => "ALTER TABLE purchase_lots ADD external_document_number VARCHAR(80) NOT NULL DEFAULT '' AFTER external_document_series",
+                'external_document_date' => "ALTER TABLE purchase_lots ADD external_document_date DATE NULL AFTER external_document_number",
+                'borderou_position' => "ALTER TABLE purchase_lots ADD borderou_position VARCHAR(40) NOT NULL DEFAULT '' AFTER external_document_date",
+                'net_g' => "ALTER TABLE purchase_lots ADD net_g INT NOT NULL DEFAULT 0 AFTER shrinkage_pct",
+                'purchase_price_cents_per_kg' => "ALTER TABLE purchase_lots ADD purchase_price_cents_per_kg INT NOT NULL DEFAULT 0 AFTER net_g",
+                'total_amount_cents' => "ALTER TABLE purchase_lots ADD total_amount_cents INT NOT NULL DEFAULT 0 AFTER purchase_price_cents_per_kg",
+            ];
+            foreach ($purchaseColumns as $name => $sql) {
+                if (!$pdo->query("SHOW COLUMNS FROM purchase_lots LIKE '$name'")->fetch()) {
+                    $pdo->exec($sql);
+                }
+            }
+            if ($pdo->query("SHOW COLUMNS FROM purchase_lots LIKE 'processor_id'")->fetch()) {
+                $stmt = $pdo->prepare(
+                    "SELECT CONSTRAINT_NAME
+                     FROM information_schema.KEY_COLUMN_USAGE
+                     WHERE TABLE_SCHEMA = DATABASE()
+                       AND TABLE_NAME = 'purchase_lots'
+                       AND COLUMN_NAME = 'processor_id'
+                       AND REFERENCED_TABLE_NAME IS NOT NULL
+                     LIMIT 1"
+                );
+                $stmt->execute();
+                $constraint = (string) $stmt->fetchColumn();
+                if ($constraint !== '') {
+                    $pdo->exec('ALTER TABLE purchase_lots DROP FOREIGN KEY `' . str_replace('`', '``', $constraint) . '`');
+                }
+                $pdo->exec("ALTER TABLE purchase_lots DROP COLUMN processor_id");
+            }
+            $pdo->exec("UPDATE purchase_lots SET purchase_date = DATE(created_at) WHERE purchase_date IS NULL");
+            $pdo->exec("UPDATE purchase_lots SET net_g = gross_g WHERE net_g = 0");
+            $pdo->exec("UPDATE purchase_lots SET external_document_type = CASE WHEN supplier_type = 'PF' THEN 'borderou' WHEN supplier_type = 'Producator agricol' THEN 'carnet' ELSE 'factura' END WHERE external_document_number = ''");
+            $pdo->exec("UPDATE purchase_lots SET status = 'In stoc' WHERE status IN ('Achizitie', 'Predat Procesator', 'Receptionat Faguri', 'Inchis')");
+            $pdo->exec("ALTER TABLE purchase_lots MODIFY supplier_type ENUM('PF', 'Producator agricol', 'PJ/PFA') NOT NULL");
+            $pdo->exec("ALTER TABLE purchase_lots MODIFY status ENUM('In stoc', 'Partial vandut', 'Vandut') NOT NULL DEFAULT 'In stoc'");
+            if (!$pdo->query("SHOW INDEX FROM purchase_lots WHERE Key_name = 'unique_purchase_external_position'")->fetch()) {
+                $pdo->exec("ALTER TABLE purchase_lots ADD UNIQUE KEY unique_purchase_external_position (external_document_type, external_document_series, external_document_number, borderou_position)");
+            }
+        }
+
+        if (!$pdo->query("SHOW TABLES LIKE 'purchase_wax_exits'")->fetchColumn()) {
+            $pdo->exec(
+                "CREATE TABLE purchase_wax_exits (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    exit_number VARCHAR(40) NOT NULL UNIQUE,
+                    partner_name VARCHAR(160) NOT NULL,
+                    partner_identifier VARCHAR(80) NOT NULL DEFAULT '',
+                    document_type VARCHAR(40) NOT NULL DEFAULT '',
+                    document_series VARCHAR(80) NOT NULL DEFAULT '',
+                    document_number VARCHAR(80) NOT NULL DEFAULT '',
+                    document_date DATE NULL,
+                    qty_g INT NOT NULL,
+                    store_id INT NOT NULL,
+                    notes TEXT NULL,
+                    created_by INT NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (store_id) REFERENCES stores(id),
+                    FOREIGN KEY (created_by) REFERENCES users(id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+            );
         }
 
         if (!$pdo->query("SHOW TABLES LIKE 'siruta_counties'")->fetchColumn()) {

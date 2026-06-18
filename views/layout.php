@@ -32,14 +32,28 @@
                 'factory_buffer' => 'Buffer fabrica',
                 'processing_register' => 'Registru gestiune',
             ];
-            $navigation = ($activeFlow ?? '') === 'processing'
-                ? ['dashboard' => 'Dashboard'] + $processingNavigation + [
+            $purchaseNavigation = [
+                'purchases' => 'Achizitie ceara',
+                'purchase_exit' => 'Iesire ceara',
+                'purchase_register' => 'Registru achizitie',
+            ];
+            if (($activeFlow ?? '') === 'processing') {
+                $navigation = ['dashboard' => 'Dashboard'] + $processingNavigation + [
                     'documents' => 'Documente',
                     'reports' => 'Rapoarte',
                     'settings' => 'Setari',
                     'audit' => 'Audit',
-                ]
-                : $generalNavigation;
+                ];
+            } elseif (($activeFlow ?? '') === 'purchase') {
+                $navigation = ['dashboard' => 'Dashboard'] + $purchaseNavigation + [
+                    'documents' => 'Documente',
+                    'reports' => 'Rapoarte',
+                    'settings' => 'Setari',
+                    'audit' => 'Audit',
+                ];
+            } else {
+                $navigation = $generalNavigation;
+            }
             ?>
             <?php foreach ($navigation as $key => $label): ?>
                 <a class="<?= $page === $key ? 'active' : '' ?>" href="index.php?page=<?= h($key) ?>"><?= h($label) ?></a>

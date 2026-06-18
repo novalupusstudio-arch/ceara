@@ -91,6 +91,22 @@ foreach ($data['stores'] as $store) {
                 API key FGO
                 <input type="password" name="fgo_private_key" autocomplete="off" value="<?= h((string) ($company['fgo_private_key'] ?? '')) ?>">
             </label>
+            <label>
+                Scazamant achizitie %
+                <input name="purchase_default_shrinkage_pct" inputmode="decimal" value="<?= h((string) ($company['purchase_default_shrinkage_pct'] ?? '0')) ?>">
+            </label>
+            <label>
+                Pret achizitie cu TVA lei/kg
+                <input name="purchase_default_price" inputmode="decimal" value="<?= h(number_format(((int) ($company['purchase_default_price_cents_per_kg'] ?? 0)) / 100, 2, '.', '')) ?>">
+            </label>
+            <label>
+                Scazamant fabrica achizitie %
+                <input name="purchase_factory_shrinkage_pct" inputmode="decimal" value="<?= h((string) ($company['purchase_factory_shrinkage_pct'] ?? '0')) ?>">
+            </label>
+            <label>
+                Pret fabrica cu TVA lei/kg
+                <input name="purchase_factory_price" inputmode="decimal" value="<?= h(number_format(((int) ($company['purchase_factory_price_cents_per_kg'] ?? 0)) / 100, 2, '.', '')) ?>">
+            </label>
             <button class="primary" type="submit">Salveaza datele societatii</button>
         </form>
     </section>

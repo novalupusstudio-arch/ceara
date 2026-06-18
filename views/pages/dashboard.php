@@ -41,9 +41,13 @@ $flowTitle = match ($activeFlow) {
             </button>
         </form>
 
-        <button class="flow-choice is-disabled" type="button" role="radio" aria-checked="false" aria-disabled="true">
-            <strong>Achizitie ceara</strong>
-            <span>Flux separat, cu stocuri proprii. Va fi reconstruit de la zero.</span>
-        </button>
+        <form method="post">
+            <input type="hidden" name="action" value="select_flow">
+            <input type="hidden" name="flow" value="purchase">
+            <button class="flow-choice <?= $activeFlow === 'purchase' ? 'is-active' : '' ?>" type="submit" role="radio" aria-checked="<?= $activeFlow === 'purchase' ? 'true' : 'false' ?>">
+                <strong>Achizitie ceara</strong>
+                <span>Intrari ceara cumparata si stoc separat de custodie.</span>
+            </button>
+        </form>
     </div>
 </section>

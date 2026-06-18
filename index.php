@@ -92,8 +92,9 @@ if ($page === 'document_mock') {
     if ($doc['document_type'] === 'BON' && !empty($doc['file_path'])) {
         $path = __DIR__ . '/storage/' . ltrim(str_replace('\\', '/', (string) $doc['file_path']), '/');
         if (is_file($path)) {
-            header('Content-Type: text/plain; charset=UTF-8');
-            header('Content-Disposition: inline; filename="' . basename($path) . '"');
+            header('Content-Type: application/octet-stream');
+            header('Content-Disposition: attachment; filename="' . basename($path) . '"');
+            header('Content-Length: ' . filesize($path));
             readfile($path);
             exit;
         }
@@ -157,13 +158,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($action === 'select_flow') {
             $flow = post_string('flow');
-            if ($flow !== 'processing') {
-                flash('Fluxul de achizitie va fi reconstruit separat.', 'error');
+            if (!in_array($flow, ['processing', 'purchase'], true)) {
+                flash('Fluxul selectat nu exista.', 'error');
                 redirect('dashboard');
             }
 
-            $_SESSION['active_flow'] = 'processing';
-            flash('Fluxul de procesare a fost activat.');
+            $_SESSION['active_flow'] = $flow;
+            flash($flow === 'processing' ? 'Fluxul de procesare a fost activat.' : 'Fluxul de achizitie a fost activat.');
             redirect('dashboard');
         }
 
@@ -257,14 +258,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($action === 'create_purchase') {
+            $assignedStore = $app->userPrimaryStore($user['id']);
+            if (!$assignedStore) {
+                throw new RuntimeException('Utilizatorul nu are o gestiune alocata.');
+            }
             $app->createPurchaseLot([
                 'supplier_name' => post_string('supplier_name'),
                 'supplier_type' => post_string('supplier_type'),
+                'supplier_phone' => post_string('supplier_phone'),
+                'supplier_identifier' => post_string('supplier_identifier'),
                 'supplier_cui' => post_string('supplier_cui'),
+                'supplier_address' => post_string('supplier_address'),
+                'supplier_county_code' => post_string('supplier_county_code'),
+                'supplier_county_name' => post_string('supplier_county_name'),
+                'supplier_locality_siruta' => post_int('supplier_locality_siruta'),
+                'supplier_locality_name' => post_string('supplier_locality_name'),
+                'supplier_postal_code' => post_string('supplier_postal_code'),
+                'purchase_date' => post_string('purchase_date'),
+                'document_series' => post_string('document_series'),
+                'document_number' => post_string('document_number'),
+                'document_position' => post_string('document_position'),
+                'document_date' => post_string('document_date'),
                 'gross_kg' => post_string('gross_kg'),
                 'shrinkage_pct' => post_string('shrinkage_pct'),
-                'store_id' => post_int('store_id'),
-                'processor_id' => post_int('processor_id'),
+                'purchase_price' => post_string('purchase_price'),
+                'store_id' => (int) $assignedStore['id'],
             ], $user['id']);
             flash('Achizitia a fost creata.');
             redirect('purchases');
@@ -274,6 +292,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $app->advancePurchaseLot(post_int('lot_id'), $user['id']);
             flash('Achizitia a avansat in flux.');
             redirect('purchases');
+        }
+
+        if ($action === 'purchase_wax_exit') {
+            $assignedStore = $app->userPrimaryStore($user['id']);
+            if (!$assignedStore) {
+                throw new RuntimeException('Utilizatorul nu are o gestiune alocata.');
+            }
+            $app->createPurchaseWaxExit([
+                'partner_name' => post_string('partner_name'),
+                'partner_identifier' => post_string('partner_identifier'),
+                'document_type' => post_string('document_type'),
+                'document_series' => post_string('document_series'),
+                'document_number' => post_string('document_number'),
+                'document_date' => post_string('document_date'),
+                'qty_kg' => post_string('qty_kg'),
+                'notes' => post_string('notes'),
+                'store_id' => (int) $assignedStore['id'],
+            ], $user['id']);
+            flash('Iesirea de ceara achizitionata a fost salvata.');
+            redirect('purchase_exit');
         }
 
         if ($action === 'change_password') {
@@ -362,6 +400,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'registry_number' => post_string('registry_number'),
                 'address' => post_string('address'),
                 'fgo_private_key' => post_string('fgo_private_key'),
+                'purchase_default_shrinkage_pct' => post_string('purchase_default_shrinkage_pct'),
+                'purchase_default_price' => post_string('purchase_default_price'),
+                'purchase_factory_shrinkage_pct' => post_string('purchase_factory_shrinkage_pct'),
+                'purchase_factory_price' => post_string('purchase_factory_price'),
             ], $user['id']);
             flash('Datele societatii au fost salvate.');
             redirect('settings', ['settings_tab' => 'company']);
@@ -388,6 +430,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } catch (Throwable $error) {
         flash($error->getMessage(), 'error');
+        if ($page === 'lot_detail' && post_int('lot_id') > 0) {
+            redirect('lot_detail', ['lot_id' => post_int('lot_id')]);
+        }
         redirect($page);
     }
 }
@@ -402,9 +447,10 @@ require_login();
 $activeFlow = $_SESSION['active_flow'] ?? '';
 $basePages = ['dashboard', 'documents', 'reports', 'settings', 'audit'];
 $processingPages = ['processing', 'lots', 'lot_detail', 'factory_delivery', 'factory_buffer', 'processing_register'];
+$purchasePages = ['purchases', 'purchase_register', 'purchase_exit'];
 $allowed = $activeFlow === 'processing'
     ? array_merge($basePages, $processingPages)
-    : $basePages;
+    : ($activeFlow === 'purchase' ? array_merge($basePages, $purchasePages) : $basePages);
 
 if (!in_array($page, $allowed, true)) {
     $page = 'dashboard';
@@ -432,6 +478,17 @@ try {
             (string) ($_GET['date_start'] ?? ''),
             (string) ($_GET['date_end'] ?? '')
         ),
+        'purchases' => [
+            'lots' => $app->purchaseLots(),
+            'assigned_store' => $app->userPrimaryStore(current_user()['id']),
+            'company_settings' => $app->companySettings(),
+        ],
+        'purchase_register' => $app->purchaseRegisterData(
+            current_user()['id'],
+            (string) ($_GET['date_start'] ?? ''),
+            (string) ($_GET['date_end'] ?? '')
+        ),
+        'purchase_exit' => $app->purchaseExitData(current_user()['id']),
         'documents' => ['documents' => $app->documents()],
         'reports' => ['dashboard' => $app->dashboard(), 'processing' => $app->processingLots(), 'purchases' => $app->purchaseLots()],
         'settings' => $app->settings(),

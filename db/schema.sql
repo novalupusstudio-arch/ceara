@@ -104,8 +104,16 @@ CREATE TABLE IF NOT EXISTS siruta_localities (
 CREATE TABLE IF NOT EXISTS suppliers (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(160) NOT NULL,
-    supplier_type ENUM('PF', 'Producator agricol', 'PFA/SRL') NOT NULL,
+    supplier_type ENUM('PF', 'Producator agricol', 'PJ/PFA') NOT NULL,
+    phone VARCHAR(80) NOT NULL DEFAULT '',
+    identifier VARCHAR(40) NOT NULL DEFAULT '',
     cui VARCHAR(40) NOT NULL DEFAULT '',
+    address VARCHAR(255) NOT NULL DEFAULT '',
+    county_code VARCHAR(10) NOT NULL DEFAULT '',
+    county_name VARCHAR(80) NOT NULL DEFAULT '',
+    locality_siruta INT NULL,
+    locality_name VARCHAR(160) NOT NULL DEFAULT '',
+    postal_code VARCHAR(20) NOT NULL DEFAULT '',
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -204,18 +212,44 @@ CREATE TABLE IF NOT EXISTS purchase_lots (
     id INT AUTO_INCREMENT PRIMARY KEY,
     lot_number VARCHAR(40) NOT NULL UNIQUE,
     supplier_id INT NOT NULL,
-    supplier_type ENUM('PF', 'Producator agricol', 'PFA/SRL') NOT NULL,
-    status ENUM('Achizitie', 'Predat Procesator', 'Receptionat Faguri', 'Inchis') NOT NULL,
+    supplier_type ENUM('PF', 'Producator agricol', 'PJ/PFA') NOT NULL,
+    status ENUM('In stoc', 'Partial vandut', 'Vandut') NOT NULL DEFAULT 'In stoc',
+    purchase_date DATE NOT NULL,
+    external_document_type ENUM('borderou', 'carnet', 'factura') NOT NULL,
+    external_document_series VARCHAR(80) NOT NULL DEFAULT '',
+    external_document_number VARCHAR(80) NOT NULL DEFAULT '',
+    external_document_date DATE NULL,
+    borderou_position VARCHAR(40) NOT NULL DEFAULT '',
     gross_g INT NOT NULL,
     shrinkage_pct DECIMAL(6,3) NOT NULL DEFAULT 0,
-    foundation_g INT NOT NULL,
+    net_g INT NOT NULL DEFAULT 0,
+    purchase_price_cents_per_kg INT NOT NULL DEFAULT 0,
+    total_amount_cents INT NOT NULL DEFAULT 0,
+    foundation_g INT NOT NULL DEFAULT 0,
     store_id INT NOT NULL,
-    processor_id INT NULL,
     created_by INT NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_purchase_external_position (external_document_type, external_document_series, external_document_number, borderou_position),
     FOREIGN KEY (supplier_id) REFERENCES suppliers(id),
     FOREIGN KEY (store_id) REFERENCES stores(id),
-    FOREIGN KEY (processor_id) REFERENCES processors(id),
+    FOREIGN KEY (created_by) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS purchase_wax_exits (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    exit_number VARCHAR(40) NOT NULL UNIQUE,
+    partner_name VARCHAR(160) NOT NULL,
+    partner_identifier VARCHAR(80) NOT NULL DEFAULT '',
+    document_type VARCHAR(40) NOT NULL DEFAULT '',
+    document_series VARCHAR(80) NOT NULL DEFAULT '',
+    document_number VARCHAR(80) NOT NULL DEFAULT '',
+    document_date DATE NULL,
+    qty_g INT NOT NULL,
+    store_id INT NOT NULL,
+    notes TEXT NULL,
+    created_by INT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (store_id) REFERENCES stores(id),
     FOREIGN KEY (created_by) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -275,6 +309,10 @@ CREATE TABLE IF NOT EXISTS company_settings (
     registry_number VARCHAR(80) NOT NULL DEFAULT '',
     address VARCHAR(255) NOT NULL DEFAULT '',
     fgo_private_key VARCHAR(255) NOT NULL DEFAULT '',
+    purchase_default_shrinkage_pct DECIMAL(6,3) NOT NULL DEFAULT 0,
+    purchase_default_price_cents_per_kg INT NOT NULL DEFAULT 0,
+    purchase_factory_shrinkage_pct DECIMAL(6,3) NOT NULL DEFAULT 0,
+    purchase_factory_price_cents_per_kg INT NOT NULL DEFAULT 0,
     updated_by INT NULL,
     updated_at TIMESTAMP NULL,
     FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL

@@ -120,6 +120,125 @@ document.addEventListener("DOMContentLoaded", () => {
     renderExchangeValues();
   }
 
+  const purchaseForm = document.querySelector("[data-purchase-form]");
+  if (purchaseForm) {
+    const typeInputs = purchaseForm.querySelectorAll("[data-purchase-type]");
+    const identifierField = purchaseForm.querySelector("[data-purchase-identifier-field]");
+    const cuiField = purchaseForm.querySelector("[data-purchase-cui-field]");
+    const positionField = purchaseForm.querySelector("[data-purchase-position-field]");
+    const docDateField = purchaseForm.querySelector("[data-purchase-doc-date-field]");
+    const countySelect = purchaseForm.querySelector("[data-purchase-county]");
+    const localitySelect = purchaseForm.querySelector("[data-purchase-locality]");
+    const countyName = purchaseForm.querySelector("[data-purchase-county-name]");
+    const localityName = purchaseForm.querySelector("[data-purchase-locality-name]");
+    const postalCode = purchaseForm.querySelector("[data-purchase-postal-code]");
+    const grossInput = purchaseForm.querySelector("[data-purchase-gross]");
+    const shrinkageInput = purchaseForm.querySelector("[data-purchase-shrinkage]");
+    const priceInput = purchaseForm.querySelector("[data-purchase-price]");
+    const totalOutput = purchaseForm.querySelector("[data-purchase-total]");
+    const netOutput = purchaseForm.querySelector("[data-purchase-net]");
+    let purchaseLocalitySeq = 0;
+
+    function selectedPurchaseType() {
+      const checked = Array.from(typeInputs).find((input) => input.checked);
+      return checked ? checked.value : "PF";
+    }
+
+    function parseDecimal(value) {
+      return Number(String(value || "0").replace(",", "."));
+    }
+
+    function renderPurchaseTotals() {
+      const grossKg = Math.max(0, parseDecimal(grossInput.value));
+      const shrinkage = Math.max(0, parseDecimal(shrinkageInput.value));
+      const price = Math.max(0, parseDecimal(priceInput.value));
+      const netKg = Math.max(0, grossKg * (1 - (shrinkage / 100)));
+      totalOutput.value = `${(grossKg * price).toFixed(2)} lei`;
+      netOutput.value = formatKg(netKg);
+    }
+
+    function syncPurchaseLocation() {
+      const countyOption = countySelect.selectedOptions[0];
+      const localityOption = localitySelect.selectedOptions[0];
+      countyName.value = countyOption && countyOption.value ? (countyOption.dataset.name || countyOption.textContent || "") : "";
+      localityName.value = localityOption && localityOption.value ? (localityOption.dataset.name || localityOption.textContent || "") : "";
+      postalCode.value = localityOption && localityOption.value ? (localityOption.dataset.postalCode || "") : "";
+    }
+
+    function populatePurchaseCounties() {
+      return fetch("index.php?page=counties_lookup", { headers: { Accept: "application/json" } })
+        .then((response) => response.json())
+        .then((payload) => {
+          countySelect.innerHTML = '<option value="">Alege judet</option>';
+          (payload.counties || []).forEach((county) => {
+            const option = document.createElement("option");
+            option.value = county.county_code;
+            option.textContent = county.name;
+            option.dataset.name = county.name;
+            countySelect.appendChild(option);
+          });
+        })
+        .catch(() => {});
+    }
+
+    function populatePurchaseLocalities(countyCode) {
+      const seq = ++purchaseLocalitySeq;
+      localitySelect.innerHTML = '<option value="">Alege localitate</option>';
+      localitySelect.disabled = !countyCode;
+      if (!countyCode) {
+        syncPurchaseLocation();
+        return;
+      }
+
+      const params = new URLSearchParams({ page: "localities_lookup", county_code: countyCode });
+      fetch(`index.php?${params.toString()}`, { headers: { Accept: "application/json" } })
+        .then((response) => response.json())
+        .then((payload) => {
+          if (seq !== purchaseLocalitySeq) {
+            return;
+          }
+          (payload.localities || []).forEach((locality) => {
+            const option = document.createElement("option");
+            option.value = locality.siruta_code;
+            option.textContent = locality.display_name || locality.name;
+            option.dataset.name = locality.name || "";
+            option.dataset.postalCode = locality.postal_code || "";
+            localitySelect.appendChild(option);
+          });
+          syncPurchaseLocation();
+        })
+        .catch(() => {});
+    }
+
+    function switchPurchaseType() {
+      const type = selectedPurchaseType();
+      const isCompany = type === "PJ/PFA";
+      identifierField.hidden = isCompany;
+      identifierField.classList.toggle("is-hidden", isCompany);
+      cuiField.hidden = !isCompany;
+      cuiField.classList.toggle("is-hidden", !isCompany);
+      positionField.hidden = isCompany;
+      positionField.classList.toggle("is-hidden", isCompany);
+      docDateField.hidden = !isCompany;
+      docDateField.classList.toggle("is-hidden", !isCompany);
+      purchaseForm.querySelector("[data-purchase-doc-series]").placeholder = isCompany ? "STU" : (type === "PF" ? "BA-2026-GEST1" : "CP-2026");
+      purchaseForm.querySelector("[data-purchase-doc-number]").placeholder = isCompany ? "Numar factura" : "Numar document";
+    }
+
+    typeInputs.forEach((input) => input.addEventListener("change", switchPurchaseType));
+    [grossInput, shrinkageInput, priceInput].forEach((input) => {
+      input.addEventListener("input", renderPurchaseTotals);
+      input.addEventListener("change", renderPurchaseTotals);
+    });
+    countySelect.addEventListener("change", () => populatePurchaseLocalities(countySelect.value));
+    localitySelect.addEventListener("change", syncPurchaseLocation);
+
+    populatePurchaseCounties();
+    switchPurchaseType();
+    renderPurchaseTotals();
+    return;
+  }
+
   const form = document.querySelector("[data-processing-form]");
   if (!form) {
     const board = document.querySelector("[data-lot-board]");
