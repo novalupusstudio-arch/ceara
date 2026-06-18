@@ -251,11 +251,15 @@ final class Database
                     vat_number VARCHAR(40) NOT NULL DEFAULT '',
                     registry_number VARCHAR(80) NOT NULL DEFAULT '',
                     address VARCHAR(255) NOT NULL DEFAULT '',
+                    fgo_private_key VARCHAR(255) NOT NULL DEFAULT '',
                     updated_by INT NULL,
                     updated_at TIMESTAMP NULL,
                     FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
             );
+        }
+        if (!$pdo->query("SHOW COLUMNS FROM company_settings LIKE 'fgo_private_key'")->fetch()) {
+            $pdo->exec("ALTER TABLE company_settings ADD fgo_private_key VARCHAR(255) NOT NULL DEFAULT '' AFTER address");
         }
 
         if (!$pdo->query("SHOW TABLES LIKE 'siruta_counties'")->fetchColumn()) {

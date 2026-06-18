@@ -87,6 +87,10 @@ foreach ($data['stores'] as $store) {
                 Sediu
                 <input name="address" value="<?= h((string) ($company['address'] ?? '')) ?>">
             </label>
+            <label class="wide">
+                API key FGO
+                <input type="password" name="fgo_private_key" autocomplete="off" value="<?= h((string) ($company['fgo_private_key'] ?? '')) ?>">
+            </label>
             <button class="primary" type="submit">Salveaza datele societatii</button>
         </form>
     </section>

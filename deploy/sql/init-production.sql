@@ -274,6 +274,7 @@ CREATE TABLE IF NOT EXISTS company_settings (
     vat_number VARCHAR(40) NOT NULL DEFAULT '',
     registry_number VARCHAR(80) NOT NULL DEFAULT '',
     address VARCHAR(255) NOT NULL DEFAULT '',
+    fgo_private_key VARCHAR(255) NOT NULL DEFAULT '',
     updated_by INT NULL,
     updated_at TIMESTAMP NULL,
     FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL

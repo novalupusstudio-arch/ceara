@@ -361,6 +361,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'vat_number' => post_string('vat_number'),
                 'registry_number' => post_string('registry_number'),
                 'address' => post_string('address'),
+                'fgo_private_key' => post_string('fgo_private_key'),
             ], $user['id']);
             flash('Datele societatii au fost salvate.');
             redirect('settings', ['settings_tab' => 'company']);

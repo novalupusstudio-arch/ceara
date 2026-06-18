@@ -49,7 +49,7 @@ $defaultProcessorId = isset($data['default_processor']['id']) ? (int) $data['def
         <div class="lookup-results" data-lookup-results hidden></div>
 
         <div class="processing-fields">
-            <div class="processing-row columns-3" data-pf-field>
+            <div class="processing-row columns-3" data-pf-row>
                 <label data-name-field>
                     <span data-name-label>Nume client</span>
                     <input name="customer_name" required placeholder="Nume client PF" data-customer-name>
@@ -64,7 +64,7 @@ $defaultProcessorId = isset($data['default_processor']['id']) ? (int) $data['def
                 </label>
             </div>
 
-            <div class="processing-row columns-4 is-hidden" data-pj-field hidden style="display:none">
+            <div class="processing-row columns-4 is-hidden" data-pj-row hidden>
                 <label>
                     Nume PJ
                     <input name="customer_name_pj" placeholder="Denumire companie" data-customer-name-pj>
@@ -96,11 +96,11 @@ $defaultProcessorId = isset($data['default_processor']['id']) ? (int) $data['def
                         <option value="">Alege localitate</option>
                     </select>
                 </label>
-                <label data-pf-field data-common-field>
+                <label data-pf-address-field>
                     Adresa
                     <input name="customer_address" required placeholder="Adresa client" data-customer-address>
                 </label>
-                <label class="is-hidden" data-pj-field hidden style="display:none">
+                <label class="is-hidden" data-pj-address-field hidden>
                     Adresa preluata
                     <input name="customer_address_pj" placeholder="Strada, numar" data-customer-address-pj>
                 </label>

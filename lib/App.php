@@ -847,7 +847,8 @@ final class App
             return;
         }
 
-        $fgo = new FgoClient($this->config['fgo'] ?? []);
+        $fgoConfig = $this->fgoConfig();
+        $fgo = new FgoClient($fgoConfig);
         if (!$fgo->enabled()) {
             throw new RuntimeException('Integrarea FGO nu este activa.');
         }
@@ -863,7 +864,7 @@ final class App
             throw new RuntimeException('FGO a emis raspuns fara link de factura.');
         }
 
-        $serie = (string) ($invoice['Serie'] ?? $this->config['fgo']['serie'] ?? $doc['series']);
+        $serie = (string) ($invoice['Serie'] ?? $fgoConfig['serie'] ?? $doc['series']);
         $number = (int) ($invoice['Numar'] ?? $invoice['NrFactura'] ?? $doc['number']);
         $notes = 'Factura FGO emisa';
         if (!empty($invoice['LinkPlata'])) {
@@ -874,6 +875,17 @@ final class App
             'UPDATE documents SET series = ?, number = ?, external_url = ?, status = ?, notes = ?, created_by = COALESCE(created_by, ?) WHERE id = ?'
         )->execute([$serie, $number, $link, 'issued', $notes, $userId, $documentId]);
         $this->logAudit($userId, 'FGO_INVOICE_CREATE', 'documents', $documentId, null, $serie . '-' . $number);
+    }
+
+    private function fgoConfig(): array
+    {
+        $config = $this->config['fgo'] ?? [];
+        $company = $this->companySettings();
+        $privateKey = trim((string) ($company['fgo_private_key'] ?? ''));
+        if ($privateKey !== '') {
+            $config['private_key'] = $privateKey;
+        }
+        return $config;
     }
 
     private function fgoInvoiceData(int $lotId, int $movementId): array
@@ -1344,6 +1356,7 @@ final class App
             'vat_number' => '',
             'registry_number' => '',
             'address' => '',
+            'fgo_private_key' => '',
         ];
     }
 
@@ -1351,13 +1364,14 @@ final class App
     {
         $this->pdo->prepare(
             'INSERT INTO company_settings
-            (id, company_name, vat_number, registry_number, address, updated_by, updated_at)
-            VALUES (1, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            (id, company_name, vat_number, registry_number, address, fgo_private_key, updated_by, updated_at)
+            VALUES (1, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             ON DUPLICATE KEY UPDATE
                 company_name = VALUES(company_name),
                 vat_number = VALUES(vat_number),
                 registry_number = VALUES(registry_number),
                 address = VALUES(address),
+                fgo_private_key = VALUES(fgo_private_key),
                 updated_by = VALUES(updated_by),
                 updated_at = CURRENT_TIMESTAMP'
         )->execute([
@@ -1365,6 +1379,7 @@ final class App
             trim((string) ($data['vat_number'] ?? '')),
             trim((string) ($data['registry_number'] ?? '')),
             trim((string) ($data['address'] ?? '')),
+            trim((string) ($data['fgo_private_key'] ?? '')),
             $userId,
         ]);
 

@@ -190,8 +190,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const grossInput = form.querySelector('input[name="gross_kg"]');
   const nameLabel = form.querySelector("[data-name-label]");
   const phoneLabel = form.querySelector("[data-phone-label]");
-  const pfFields = form.querySelectorAll("[data-pf-field]");
-  const pjFields = form.querySelectorAll("[data-pj-field]");
+  const pfRows = form.querySelectorAll("[data-pf-row]");
+  const pjRows = form.querySelectorAll("[data-pj-row]");
+  const pfAddressField = form.querySelector("[data-pf-address-field]");
+  const pjAddressField = form.querySelector("[data-pj-address-field]");
 
   let lookupTimer = null;
   let anafLookupSeq = 0;
@@ -346,16 +348,22 @@ document.addEventListener("DOMContentLoaded", () => {
     customerAddressPj.required = isPJ;
     customerPhonePj.required = isPJ;
 
-    pfFields.forEach((field) => {
-      field.hidden = isPJ;
-      field.classList.toggle("is-hidden", isPJ);
-      field.style.display = isPJ ? "none" : "";
+    pfRows.forEach((row) => {
+      row.hidden = isPJ;
+      row.classList.toggle("is-hidden", isPJ);
     });
-    pjFields.forEach((field) => {
-      field.hidden = !isPJ;
-      field.classList.toggle("is-hidden", !isPJ);
-      field.style.display = isPJ ? "" : "none";
+    pjRows.forEach((row) => {
+      row.hidden = !isPJ;
+      row.classList.toggle("is-hidden", !isPJ);
     });
+    if (pfAddressField) {
+      pfAddressField.hidden = isPJ;
+      pfAddressField.classList.toggle("is-hidden", isPJ);
+    }
+    if (pjAddressField) {
+      pjAddressField.hidden = !isPJ;
+      pjAddressField.classList.toggle("is-hidden", !isPJ);
+    }
 
     existingCustomerId.value = "0";
     forceNewCustomer.value = "0";
@@ -474,6 +482,7 @@ document.addEventListener("DOMContentLoaded", () => {
     forceNewCustomer.value = "0";
     setCustomerInputsReadOnly(false);
     if (customerType() === "PJ") {
+      anafLookupSeq += 1;
       customerNamePj.value = "";
       customerAddressPj.value = "";
       customerPhonePj.value = "";
