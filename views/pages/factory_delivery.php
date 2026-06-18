@@ -36,11 +36,11 @@ $shrinkagePct = $selectedProcessor ? (float) $selectedProcessor['exchange_shrink
         <div class="factory-totals">
             <label>
                 Total ceara de predat
-                <input value="0.000 kg" readonly data-factory-total-wax>
+                <input value="0,000 kg" readonly data-factory-total-wax>
             </label>
             <label>
                 Total respingere fabrica
-                <input value="0.000 kg" readonly data-factory-total-reject>
+                <input value="0,000 kg" readonly data-factory-total-reject>
             </label>
             <label>
                 Cost procesare
@@ -48,7 +48,7 @@ $shrinkagePct = $selectedProcessor ? (float) $selectedProcessor['exchange_shrink
             </label>
             <label>
                 Faguri de primit
-                <input value="0.000 kg" readonly data-factory-total-foundation>
+                <input value="0,000 kg" readonly data-factory-total-foundation>
             </label>
         </div>
 

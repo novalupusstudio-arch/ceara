@@ -21,7 +21,10 @@
             <tbody>
                 <?php foreach ($data['documents'] as $doc): ?>
                     <tr>
-                        <td><strong><?= h($doc['series']) ?> <?= h((string) $doc['number']) ?></strong><br><span class="muted"><?= h($doc['document_type']) ?></span></td>
+                        <td>
+                            <a class="table-link" href="<?= h($doc['url']) ?>" target="_blank" rel="noopener"><?= h($doc['label']) ?></a><br>
+                            <span class="muted"><?= h($doc['document_type']) ?></span>
+                        </td>
                         <td><?= h($doc['store_name']) ?></td>
                         <td><?= h($doc['reference_type']) ?> #<?= h((string) $doc['reference_id']) ?></td>
                         <td><span class="status"><?= h($doc['status']) ?></span></td>

@@ -7,6 +7,8 @@ session_start();
 require __DIR__ . '/lib/helpers.php';
 require __DIR__ . '/lib/Database.php';
 require __DIR__ . '/lib/Auth.php';
+require __DIR__ . '/lib/FgoClient.php';
+require __DIR__ . '/lib/FiscalWireExporter.php';
 require __DIR__ . '/lib/App.php';
 
 $autoload = __DIR__ . '/vendor/autoload.php';
@@ -29,7 +31,7 @@ try {
 }
 
 $auth = new Auth($pdo);
-$app = new App($pdo);
+$app = new App($pdo, $config);
 $page = $_GET['page'] ?? 'dashboard';
 $activeFlow = $_SESSION['active_flow'] ?? '';
 
@@ -42,6 +44,37 @@ if ($page === 'customer_lookup') {
     exit;
 }
 
+if ($page === 'counties_lookup') {
+    require_login();
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['counties' => $app->sirutaCounties()], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+if ($page === 'localities_lookup') {
+    require_login();
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode([
+        'localities' => $app->sirutaLocalities(
+            (string) ($_GET['county_code'] ?? ''),
+            (string) ($_GET['term'] ?? '')
+        ),
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+if ($page === 'anaf_company_lookup') {
+    require_login();
+    header('Content-Type: application/json; charset=utf-8');
+    try {
+        echo json_encode(['company' => $app->lookupAnafCompany((string) ($_GET['cui'] ?? ''))], JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $error) {
+        http_response_code(422);
+        echo json_encode(['error' => $error->getMessage()], JSON_UNESCAPED_UNICODE);
+    }
+    exit;
+}
+
 if ($page === 'document_mock') {
     require_login();
     $doc = $app->documentById((int) ($_GET['document_id'] ?? 0));
@@ -49,6 +82,21 @@ if ($page === 'document_mock') {
         http_response_code(404);
         echo 'Documentul nu exista.';
         exit;
+    }
+
+    if (!empty($doc['external_url'])) {
+        header('Location: ' . $doc['external_url']);
+        exit;
+    }
+
+    if ($doc['document_type'] === 'BON' && !empty($doc['file_path'])) {
+        $path = __DIR__ . '/storage/' . ltrim(str_replace('\\', '/', (string) $doc['file_path']), '/');
+        if (is_file($path)) {
+            header('Content-Type: text/plain; charset=UTF-8');
+            header('Content-Disposition: inline; filename="' . basename($path) . '"');
+            readfile($path);
+            exit;
+        }
     }
 
     $pdf = $app->documentPdfById((int) $doc['id']);
@@ -129,12 +177,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'customer_name' => post_string('customer_name'),
                 'customer_phone' => post_string('customer_phone'),
                 'customer_address' => post_string('customer_address'),
+                'customer_identifier' => post_string('customer_identifier'),
                 'customer_type' => post_string('customer_type', 'PF'),
                 'customer_name_pj' => post_string('customer_name_pj'),
                 'customer_phone_pj' => post_string('customer_phone_pj'),
                 'customer_address_pj' => post_string('customer_address_pj'),
                 'customer_cui' => post_string('customer_cui'),
                 'customer_representative' => post_string('customer_representative'),
+                'customer_county_code' => post_string('customer_county_code'),
+                'customer_county_name' => post_string('customer_county_name'),
+                'customer_locality_siruta' => post_int('customer_locality_siruta'),
+                'customer_locality_name' => post_string('customer_locality_name'),
+                'customer_postal_code' => post_string('customer_postal_code'),
+                'customer_registry_number' => post_string('customer_registry_number'),
+                'customer_legal_form' => post_string('customer_legal_form'),
+                'customer_vat_status' => post_string('customer_vat_status'),
+                'customer_external_source' => post_string('customer_external_source'),
+                'customer_external_checked_at' => post_string('customer_external_checked_at'),
                 'existing_customer_id' => post_int('existing_customer_id'),
                 'force_new_customer' => post_int('force_new_customer'),
                 'known_customer' => post_int('known_customer'),
@@ -153,7 +212,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($action === 'processing_document') {
-            $documentId = $app->ensureProcessingDocument(post_int('lot_id'), post_string('document_type'), $user['id'], post_int('movement_id'));
+            $documentId = $app->ensureProcessingDocument(
+                post_int('lot_id'),
+                post_string('document_type'),
+                $user['id'],
+                post_int('movement_id'),
+                post_string('payment_method', 'cash')
+            );
             redirect('document_mock', ['document_id' => $documentId]);
         }
 
@@ -344,22 +409,36 @@ if (!in_array($page, $allowed, true)) {
     $page = 'dashboard';
 }
 
-$data = match ($page) {
-    'dashboard' => array_merge($app->dashboard(), ['active_flow' => $activeFlow]),
-    'processing' => [
-        'processors' => $app->processors(),
-        'assigned_store' => $app->userPrimaryStore(current_user()['id']),
-        'default_processor' => $app->defaultProcessorForUser(current_user()['id']),
-    ],
-    'lots' => $app->processingLotsBoard((array) ($_GET['status'] ?? [])),
-    'lot_detail' => $app->processingLotDetail((int) ($_GET['lot_id'] ?? 0)),
-    'factory_delivery' => $app->factoryDeliveryData((int) ($_GET['processor_id'] ?? 0)),
-    'factory_buffer' => $app->factoryBufferData(),
-    'processing_register' => $app->processingRegisterData(current_user()['id']),
-    'documents' => ['documents' => $app->documents()],
-    'reports' => ['dashboard' => $app->dashboard(), 'processing' => $app->processingLots(), 'purchases' => $app->purchaseLots()],
-    'settings' => $app->settings(),
-    'audit' => ['entries' => $app->audit()],
-};
+if ($page === 'lot_detail' && (int) ($_GET['lot_id'] ?? 0) <= 0) {
+    flash('Lotul nu a fost gasit.', 'error');
+    redirect('lots');
+}
+
+try {
+    $data = match ($page) {
+        'dashboard' => array_merge($app->dashboard(), ['active_flow' => $activeFlow]),
+        'processing' => [
+            'processors' => $app->processors(),
+            'assigned_store' => $app->userPrimaryStore(current_user()['id']),
+            'default_processor' => $app->defaultProcessorForUser(current_user()['id']),
+        ],
+        'lots' => $app->processingLotsBoard((array) ($_GET['status'] ?? [])),
+        'lot_detail' => $app->processingLotDetail((int) ($_GET['lot_id'] ?? 0)),
+        'factory_delivery' => $app->factoryDeliveryData((int) ($_GET['processor_id'] ?? 0)),
+        'factory_buffer' => $app->factoryBufferData(),
+        'processing_register' => $app->processingRegisterData(
+            current_user()['id'],
+            (string) ($_GET['date_start'] ?? ''),
+            (string) ($_GET['date_end'] ?? '')
+        ),
+        'documents' => ['documents' => $app->documents()],
+        'reports' => ['dashboard' => $app->dashboard(), 'processing' => $app->processingLots(), 'purchases' => $app->purchaseLots()],
+        'settings' => $app->settings(),
+        'audit' => ['entries' => $app->audit()],
+    };
+} catch (RuntimeException $error) {
+    flash($error->getMessage(), 'error');
+    redirect($page === 'lot_detail' ? 'lots' : 'dashboard');
+}
 
 require __DIR__ . '/views/layout.php';

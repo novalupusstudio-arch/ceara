@@ -340,6 +340,30 @@ label select {
   align-items: end;
 }
 
+.processing-fields {
+  display: grid;
+  gap: 14px;
+}
+
+.processing-row {
+  display: grid;
+  gap: 14px;
+  align-items: end;
+}
+
+.processing-row.columns-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.processing-row.columns-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
 .processing-form {
   display: grid;
   gap: 16px;
@@ -764,6 +788,53 @@ th {
   margin-top: 14px;
 }
 
+.panel-heading-row {
+  align-items: end;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.panel-heading-row h2 {
+  margin: 0;
+}
+
+.date-filter-form {
+  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.date-filter-form label {
+  min-width: 150px;
+}
+
+.register-balance-summary {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 0;
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+
+.register-balance-row {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) minmax(180px, 1fr);
+  padding: 10px 12px;
+}
+
+.register-balance-row + .register-balance-row {
+  border-top: 1px solid var(--line);
+}
+
+.register-balance-row strong {
+  color: var(--text);
+}
+
 .store-list {
   display: grid;
   gap: 12px;
@@ -861,6 +932,8 @@ th {
   .flow-selector,
   .two-column,
   .form-grid,
+  .processing-row.columns-3,
+  .processing-row.columns-4,
   .lot-detail-header,
   .lot-metric-grid,
   .customer-search-row,
@@ -879,6 +952,17 @@ th {
   }
 
   .document-template-editor header {
+    flex-direction: column;
+  }
+
+  .panel-heading-row,
+  .date-filter-form,
+  .register-balance-row {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .panel-heading-row {
     flex-direction: column;
   }
 }

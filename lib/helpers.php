@@ -44,7 +44,7 @@ function flash(?string $message = null, string $type = 'success'): ?array
 
 function grams_to_kg(int $grams): string
 {
-    return number_format($grams / 1000, 3, '.', '') . ' kg';
+    return number_format($grams / 1000, 3, ',', '') . ' kg';
 }
 
 function kg_to_grams(string $kg): int

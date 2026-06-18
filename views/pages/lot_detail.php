@@ -14,7 +14,7 @@ $movementLabels = [
     'RECOVER_FOUNDATION_FROM_CLIENT' => 'Recuperare faguri client',
 ];
 
-$docButton = static function (array $lot, int $movementId, string $type, string $label, array $documents): void {
+$docButton = static function (array $lot, int $movementId, string $type, string $label, array $documents, string $paymentMethod = ''): void {
     $key = $movementId . ':' . $type;
     $exists = !empty($documents[$key]);
     $buttonLabel = ($exists ? 'Print ' : 'Genereaza ') . $label;
@@ -24,6 +24,9 @@ $docButton = static function (array $lot, int $movementId, string $type, string 
         <input type="hidden" name="lot_id" value="<?= h((string) $lot['id']) ?>">
         <input type="hidden" name="movement_id" value="<?= h((string) $movementId) ?>">
         <input type="hidden" name="document_type" value="<?= h($type) ?>">
+        <?php if ($paymentMethod !== ''): ?>
+            <input type="hidden" name="payment_method" value="<?= h($paymentMethod) ?>">
+        <?php endif; ?>
         <button class="secondary compact" type="submit"><?= h($buttonLabel) ?></button>
     </form>
     <?php
@@ -125,7 +128,8 @@ $docButton = static function (array $lot, int $movementId, string $type, string 
                                 <?php endif; ?>
                                 <?php if ($movement['movement_type'] === 'EXCHANGE_WAX_WITH_CLIENT'): ?>
                                     <?php $docButton($lot, (int) $movement['id'], 'FACT', 'Factura', $documents); ?>
-                                    <?php $docButton($lot, (int) $movement['id'], 'BON', 'Bon', $documents); ?>
+                                    <?php $docButton($lot, (int) $movement['id'], 'BON', 'Bon numerar', $documents, 'cash'); ?>
+                                    <?php $docButton($lot, (int) $movement['id'], 'BON', 'Bon card', $documents, 'card'); ?>
                                     <?php $docButton($lot, (int) $movement['id'], 'PV-FAG', 'PV Faguri', $documents); ?>
                                 <?php endif; ?>
                                 <?php if ($movement['movement_type'] === 'RETURN_WAX_TO_CLIENT'): ?>
@@ -178,7 +182,7 @@ $docButton = static function (array $lot, int $movementId, string $type, string 
             </label>
             <label>
                 Faguri de schimbat
-                <input value="0.000 kg" readonly data-exchange-foundation>
+                <input value="0,000 kg" readonly data-exchange-foundation>
             </label>
             <label>
                 Valoare manopera

@@ -20,12 +20,15 @@ $excludedDirectories = @(
     "dist",
     "build",
     "coverage",
+    "storage",
     "tmp",
     "temp",
     ".cache"
 )
 
 $excludedFiles = @(
+    ".gitattributes",
+    ".gitignore",
     ".env",
     "xampp-target.local.txt",
     ".DS_Store",

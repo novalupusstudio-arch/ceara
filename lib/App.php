@@ -4,7 +4,7 @@ final class App
 {
     private const ROLES = ['admin', 'operator'];
 
-    public function __construct(public PDO $pdo)
+    public function __construct(public PDO $pdo, private array $config = [])
     {
     }
 
@@ -21,6 +21,106 @@ final class App
     public function processors(): array
     {
         return $this->pdo->query('SELECT * FROM processors ORDER BY id')->fetchAll();
+    }
+
+    public function sirutaCounties(): array
+    {
+        return $this->pdo->query(
+            'SELECT county_code, name
+             FROM siruta_counties
+             ORDER BY name'
+        )->fetchAll();
+    }
+
+    public function sirutaLocalities(string $countyCode, string $term = ''): array
+    {
+        $countyCode = trim($countyCode);
+        if ($countyCode === '') {
+            return [];
+        }
+
+        $term = trim($term);
+        if ($term !== '') {
+            $stmt = $this->pdo->prepare(
+                'SELECT siruta_code, county_code, name, display_name, postal_code, parent_name, parent_type
+                 FROM siruta_localities
+                 WHERE county_code = ?
+                    AND (normalized_name LIKE ? OR display_name LIKE ?)
+                 ORDER BY display_name
+                 LIMIT 120'
+            );
+            $stmt->execute([$countyCode, '%' . $this->normalizeLocationName($term) . '%', '%' . $term . '%']);
+            return $stmt->fetchAll();
+        }
+
+        $stmt = $this->pdo->prepare(
+            'SELECT siruta_code, county_code, name, display_name, postal_code, parent_name, parent_type
+             FROM siruta_localities
+             WHERE county_code = ?
+             ORDER BY display_name
+             LIMIT 400'
+        );
+        $stmt->execute([$countyCode]);
+        return $stmt->fetchAll();
+    }
+
+    public function lookupAnafCompany(string $cui): array
+    {
+        $cui = preg_replace('/\D+/', '', strtoupper(trim($cui))) ?? '';
+        if ($cui === '') {
+            throw new RuntimeException('CUI-ul este obligatoriu pentru preluarea datelor ANAF.');
+        }
+
+        $url = 'https://demoanaf.ro/api/company/' . rawurlencode($cui);
+        $context = stream_context_create([
+            'http' => [
+                'timeout' => 12,
+                'header' => "Accept: application/json\r\n",
+            ],
+        ]);
+        $raw = @file_get_contents($url, false, $context);
+        if ($raw === false) {
+            throw new RuntimeException('Nu am putut contacta serviciul ANAF.');
+        }
+
+        $payload = json_decode($raw, true);
+        if (!is_array($payload) || empty($payload['success']) || !is_array($payload['data'] ?? null)) {
+            throw new RuntimeException('Serviciul ANAF nu a returnat date valide pentru CUI-ul cautat.');
+        }
+
+        $data = $payload['data'];
+        $hq = is_array($data['headquartersAddress'] ?? null) ? $data['headquartersAddress'] : [];
+        $countyName = (string) ($hq['county'] ?? '');
+        $localityRaw = (string) ($hq['locality'] ?? '');
+        $match = $this->matchSirutaLocation($countyName, $localityRaw, (string) ($hq['postalCode'] ?? $data['postalCode'] ?? ''));
+
+        $address = $this->cleanCompanyAddress(
+            (string) ($data['address'] ?? ''),
+            $match['county_name'] ?: $countyName,
+            $match['locality_name'] ?: $localityRaw,
+            (string) ($hq['postalCode'] ?? $data['postalCode'] ?? '')
+        );
+
+        return [
+            'customer_type' => 'PJ',
+            'name' => (string) ($data['name'] ?? ''),
+            'identifier' => $cui,
+            'cui' => $cui,
+            'phone' => '',
+            'representative' => '',
+            'address' => $address,
+            'registry_number' => (string) ($data['registrationNumber'] ?? ''),
+            'legal_form' => (string) ($data['legalForm'] ?? ''),
+            'vat_status' => (string) ($data['vatStatus'] ?? ''),
+            'postal_code' => (string) ($hq['postalCode'] ?? $data['postalCode'] ?? ''),
+            'county_name' => $match['county_name'] ?: $countyName,
+            'county_code' => $match['county_code'],
+            'locality_name' => $match['locality_name'] ?: $localityRaw,
+            'locality_siruta' => $match['locality_siruta'],
+            'locality_display_name' => $match['locality_display_name'],
+            'external_source' => 'anaf',
+            'external_checked_at' => date('Y-m-d H:i:s'),
+        ];
     }
 
     public function userPrimaryStore(int $userId): ?array
@@ -249,12 +349,20 @@ final class App
         return $pdf === false ? null : $pdf;
     }
 
-    public function processingRegisterData(int $userId): array
+    public function processingRegisterData(int $userId, string $dateStart = '', string $dateEnd = ''): array
     {
         $store = $this->userPrimaryStore($userId);
         if (!$store) {
             throw new RuntimeException('Utilizatorul nu are o gestiune alocata.');
         }
+
+        $dateStart = $this->normalizeDate($dateStart) ?: date('Y-m-01');
+        $dateEnd = $this->normalizeDate($dateEnd) ?: date('Y-m-d');
+        if ($dateStart > $dateEnd) {
+            [$dateStart, $dateEnd] = [$dateEnd, $dateStart];
+        }
+        $periodStart = $dateStart . ' 00:00:00';
+        $periodEnd = $dateEnd . ' 23:59:59';
 
         $stmt = $this->pdo->prepare(
             "SELECT reference_type,
@@ -267,9 +375,10 @@ final class App
                AND movement_type IN ('wax_custody', 'foundation_operational')
                AND reference_type IN ('processing_lot', 'processing_lot_movement', 'factory_batch', 'factory_buffer_adjustment')
              GROUP BY reference_type, reference_id
+             HAVING created_at BETWEEN ? AND ?
              ORDER BY created_at DESC, reference_id DESC"
         );
-        $stmt->execute([(int) $store['id']]);
+        $stmt->execute([(int) $store['id'], $periodStart, $periodEnd]);
 
         $rows = [];
         foreach ($stmt->fetchAll() as $row) {
@@ -280,6 +389,12 @@ final class App
             'store' => $store,
             'wax_total_g' => $this->sumInventoryForStore('wax_custody', (int) $store['id']),
             'foundation_total_g' => $this->sumInventoryForStore('foundation_operational', (int) $store['id']),
+            'date_start' => $dateStart,
+            'date_end' => $dateEnd,
+            'opening_wax_g' => $this->sumInventoryForStoreUntil('wax_custody', (int) $store['id'], $periodStart, false),
+            'opening_foundation_g' => $this->sumInventoryForStoreUntil('foundation_operational', (int) $store['id'], $periodStart, false),
+            'closing_wax_g' => $this->sumInventoryForStoreUntil('wax_custody', (int) $store['id'], $periodEnd, true),
+            'closing_foundation_g' => $this->sumInventoryForStoreUntil('foundation_operational', (int) $store['id'], $periodEnd, true),
             'rows' => $rows,
         ];
     }
@@ -325,12 +440,20 @@ final class App
 
     public function documents(): array
     {
-        return $this->pdo->query(
+        $documents = $this->pdo->query(
             'SELECT d.*, st.name AS store_name
              FROM documents d
              LEFT JOIN stores st ON st.id = d.store_id
              ORDER BY d.id DESC LIMIT 80'
         )->fetchAll();
+
+        foreach ($documents as &$document) {
+            $document['label'] = $this->formatDocumentLabel($document);
+            $document['url'] = 'index.php?page=document_mock&document_id=' . (int) $document['id'];
+        }
+        unset($document);
+
+        return $documents;
     }
 
     public function audit(): array
@@ -667,7 +790,7 @@ final class App
         }
     }
 
-    public function ensureProcessingDocument(int $lotId, string $documentType, int $userId, int $movementId = 0): int
+    public function ensureProcessingDocument(int $lotId, string $documentType, int $userId, int $movementId = 0, string $paymentMethod = 'cash'): int
     {
         $lot = $this->find('processing_lots', $lotId);
         if (!$lot) {
@@ -677,12 +800,16 @@ final class App
         $referenceType = $movementId > 0 ? 'processing_lot_movement' : 'processing_lot';
         $referenceId = $movementId > 0 ? $movementId : $lotId;
         $stmt = $this->pdo->prepare(
-            'SELECT id, file_path FROM documents WHERE reference_type = ? AND reference_id = ? AND document_type = ? LIMIT 1'
+            'SELECT id, file_path, external_url FROM documents WHERE reference_type = ? AND reference_id = ? AND document_type = ? LIMIT 1'
         );
         $stmt->execute([$referenceType, $referenceId, $documentType]);
         $existingDocument = $stmt->fetch();
         if ($existingDocument) {
-            if (empty($existingDocument['file_path'])) {
+            if ($documentType === 'FACT') {
+                $this->ensureFgoInvoice((int) $existingDocument['id'], $lotId, $movementId, $userId);
+            } elseif ($documentType === 'BON') {
+                $this->ensureFiscalWireReceipt((int) $existingDocument['id'], $lotId, $movementId, $paymentMethod, $userId);
+            } elseif (empty($existingDocument['file_path'])) {
                 $this->renderDocumentFile((int) $existingDocument['id']);
             }
             return (int) $existingDocument['id'];
@@ -696,12 +823,192 @@ final class App
                 'created_by' => $userId,
             ]);
             $this->logAudit($userId, 'PROCESSING_DOCUMENT', 'documents', $lotId, null, $documentType);
+            if ($documentType === 'FACT') {
+                $this->ensureFgoInvoice($documentId, $lotId, $movementId, $userId);
+            }
+            if ($documentType === 'BON') {
+                $this->ensureFiscalWireReceipt($documentId, $lotId, $movementId, $paymentMethod, $userId);
+            }
             $this->pdo->commit();
             return $documentId;
         } catch (Throwable $error) {
             $this->pdo->rollBack();
             throw $error;
         }
+    }
+
+    private function ensureFgoInvoice(int $documentId, int $lotId, int $movementId, int $userId): void
+    {
+        $doc = $this->documentById($documentId);
+        if (!$doc) {
+            throw new RuntimeException('Documentul de factura nu exista.');
+        }
+        if (!empty($doc['external_url'])) {
+            return;
+        }
+
+        $fgo = new FgoClient($this->config['fgo'] ?? []);
+        if (!$fgo->enabled()) {
+            throw new RuntimeException('Integrarea FGO nu este activa.');
+        }
+        if ($movementId <= 0) {
+            throw new RuntimeException('Factura FGO trebuie legata de o operatie de schimb ceara.');
+        }
+
+        $invoiceData = $this->fgoInvoiceData($lotId, $movementId);
+        $response = $fgo->emitInvoice($invoiceData['payload'], $invoiceData['client_name']);
+        $invoice = is_array($response['Factura'] ?? null) ? $response['Factura'] : [];
+        $link = (string) ($invoice['Link'] ?? $response['Link'] ?? '');
+        if ($link === '') {
+            throw new RuntimeException('FGO a emis raspuns fara link de factura.');
+        }
+
+        $serie = (string) ($invoice['Serie'] ?? $this->config['fgo']['serie'] ?? $doc['series']);
+        $number = (int) ($invoice['Numar'] ?? $invoice['NrFactura'] ?? $doc['number']);
+        $notes = 'Factura FGO emisa';
+        if (!empty($invoice['LinkPlata'])) {
+            $notes .= ' | Link plata: ' . $invoice['LinkPlata'];
+        }
+
+        $this->pdo->prepare(
+            'UPDATE documents SET series = ?, number = ?, external_url = ?, status = ?, notes = ?, created_by = COALESCE(created_by, ?) WHERE id = ?'
+        )->execute([$serie, $number, $link, 'issued', $notes, $userId, $documentId]);
+        $this->logAudit($userId, 'FGO_INVOICE_CREATE', 'documents', $documentId, null, $serie . '-' . $number);
+    }
+
+    private function fgoInvoiceData(int $lotId, int $movementId): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT m.*, p.lot_number,
+                    c.name AS customer_name, c.customer_type, c.phone, c.address, c.identifier, c.cui,
+                    c.county_name, c.locality_name, c.postal_code
+             FROM processing_lot_movements m
+             JOIN processing_lots p ON p.id = m.lot_id
+             JOIN customers c ON c.id = p.customer_id
+             WHERE m.id = ? AND p.id = ?'
+        );
+        $stmt->execute([$movementId, $lotId]);
+        $row = $stmt->fetch();
+        if (!$row) {
+            throw new RuntimeException('Operatia de schimb pentru factura nu exista.');
+        }
+        if ((string) $row['movement_type'] !== 'EXCHANGE_WAX_WITH_CLIENT') {
+            throw new RuntimeException('Factura FGO se emite doar pentru schimb ceara client.');
+        }
+
+        $serviceValueCents = (int) $row['service_value_cents'];
+        if ($serviceValueCents <= 0) {
+            throw new RuntimeException('Valoarea manoperei este zero; factura FGO nu poate fi emisa.');
+        }
+
+        $clientName = trim((string) $row['customer_name']);
+        $clientType = (string) $row['customer_type'] === 'PJ' ? 'PJ' : 'PF';
+        $clientIdentifier = trim((string) ($row['identifier'] ?: ($row['cui'] ?? '')));
+        $client = [
+            'Denumire' => $clientName,
+            'Tip' => $clientType,
+            'Tara' => (string) ($this->config['fgo']['default_country'] ?? 'RO'),
+            'Judet' => (string) ($row['county_name'] ?: ($this->config['fgo']['default_county'] ?? 'Bacau')),
+            'Localitate' => (string) ($row['locality_name'] ?: ($this->config['fgo']['default_locality'] ?? 'Onesti')),
+            'Adresa' => (string) ($row['address'] ?? ''),
+            'Telefon' => (string) ($row['phone'] ?? ''),
+        ];
+        if ($clientIdentifier !== '') {
+            $client['CodUnic'] = $clientIdentifier;
+        }
+
+        $articleName = (string) ($this->config['fgo']['article_name'] ?? 'Servicii procesare ceara');
+        $payload = [
+            'DataEmitere' => date('Y-m-d'),
+            'IdExtern' => 'ceara-movement-' . $movementId,
+            'Client' => $client,
+            'Continut' => [[
+                'Denumire' => $articleName . ' - lot ' . $row['lot_number'],
+                'Descriere' => 'Cantitate ceara schimbata: ' . grams_to_kg((int) $row['wax_g']),
+                'NrProduse' => 1,
+                'UM' => (string) ($this->config['fgo']['article_um'] ?? 'BUC'),
+                'CotaTVA' => (float) ($this->config['fgo']['vat_rate'] ?? 21),
+                'PretTotal' => round($serviceValueCents / 100, 2),
+            ]],
+            'Explicatii' => 'Factura generata din aplicatia Ceara pentru lot ' . $row['lot_number'] . '.',
+            'VerificareDuplicat' => true,
+        ];
+
+        return [
+            'payload' => $payload,
+            'client_name' => $clientName,
+        ];
+    }
+
+    private function ensureFiscalWireReceipt(int $documentId, int $lotId, int $movementId, string $paymentMethod, int $userId): void
+    {
+        $doc = $this->documentById($documentId);
+        if (!$doc) {
+            throw new RuntimeException('Documentul de bon nu exista.');
+        }
+
+        $exporter = new FiscalWireExporter($this->config['fiscalwire'] ?? []);
+        if (!$exporter->enabled()) {
+            throw new RuntimeException('Integrarea FiscalWire nu este activa.');
+        }
+        if ($movementId <= 0) {
+            throw new RuntimeException('Bonul FiscalWire trebuie legat de o operatie de schimb ceara.');
+        }
+
+        $receiptData = $this->fiscalWireReceiptData($lotId, $movementId, $paymentMethod);
+        $content = $exporter->buildReceipt($receiptData);
+        $store = $this->find('stores', (int) $doc['store_id']);
+        if (!$store) {
+            throw new RuntimeException('Gestiunea pentru bon nu exista.');
+        }
+
+        $fileName = $this->safePathPart($this->formatDocumentLabel($doc) . '_' . ($receiptData['lot_number'] ?? 'lot')) . '.' . $exporter->extension();
+        $relativePath = 'fiscalwire/' . $this->safePathPart((string) ($store['code'] ?? 'gestiune')) . '/' . $fileName;
+        $absolutePath = $this->storagePath($relativePath);
+        $dir = dirname($absolutePath);
+        if (!is_dir($dir)) {
+            mkdir($dir, 0775, true);
+        }
+        file_put_contents($absolutePath, $content);
+        $exportPath = $exporter->writeReceipt($fileName, $content);
+
+        $notes = 'Bon FiscalWire ' . ($receiptData['payment_method'] === 'card' ? 'card' : 'numerar') . ' exportat: ' . $exportPath;
+        $this->pdo->prepare(
+            'UPDATE documents SET file_path = ?, status = ?, notes = ?, created_by = COALESCE(created_by, ?) WHERE id = ?'
+        )->execute([$relativePath, 'issued', $notes, $userId, $documentId]);
+        $this->logAudit($userId, 'FISCALWIRE_RECEIPT_CREATE', 'documents', $documentId, null, $fileName);
+    }
+
+    private function fiscalWireReceiptData(int $lotId, int $movementId, string $paymentMethod): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT m.*, p.lot_number,
+                    c.name AS customer_name, c.identifier, c.cui
+             FROM processing_lot_movements m
+             JOIN processing_lots p ON p.id = m.lot_id
+             JOIN customers c ON c.id = p.customer_id
+             WHERE m.id = ? AND p.id = ?'
+        );
+        $stmt->execute([$movementId, $lotId]);
+        $row = $stmt->fetch();
+        if (!$row) {
+            throw new RuntimeException('Operatia de schimb pentru bon nu exista.');
+        }
+        if ((string) $row['movement_type'] !== 'EXCHANGE_WAX_WITH_CLIENT') {
+            throw new RuntimeException('Bonul FiscalWire se emite doar pentru schimb ceara client.');
+        }
+        if ((int) $row['service_value_cents'] <= 0) {
+            throw new RuntimeException('Valoarea manoperei este zero; bonul FiscalWire nu poate fi emis.');
+        }
+
+        return [
+            'article_name' => (string) ($this->config['fiscalwire']['article_name'] ?? 'Servicii procesare'),
+            'amount_cents' => (int) $row['service_value_cents'],
+            'payment_method' => $paymentMethod === 'card' ? 'card' : 'cash',
+            'lot_number' => (string) $row['lot_number'],
+            'wax_kg' => grams_to_kg((int) $row['wax_g']),
+            'client_identifier' => (string) ($row['identifier'] ?: ($row['cui'] ?? '')),
+        ];
     }
 
     public function createPurchaseLot(array $data, int $userId): int
@@ -1130,6 +1437,135 @@ final class App
         return $map;
     }
 
+    private function matchSirutaLocation(string $countyName, string $localityText, string $postalCode = ''): array
+    {
+        $empty = [
+            'county_code' => '',
+            'county_name' => '',
+            'locality_siruta' => 0,
+            'locality_name' => '',
+            'locality_display_name' => '',
+        ];
+
+        $countyNorm = $this->normalizeLocationName($countyName);
+        if ($countyNorm === '') {
+            return $empty;
+        }
+
+        $stmt = $this->pdo->prepare('SELECT * FROM siruta_counties WHERE normalized_name = ? LIMIT 1');
+        $stmt->execute([$countyNorm]);
+        $county = $stmt->fetch();
+        if (!$county) {
+            return $empty;
+        }
+
+        $parts = array_values(array_filter(array_map('trim', explode(',', $localityText))));
+        $candidate = $parts[0] ?? $localityText;
+        $candidate = preg_replace('/^(SAT|SATUL|COMUNA|ORASUL|ORAS|MUNICIPIUL)\s+/iu', '', $candidate) ?? $candidate;
+        $candidateNorm = $this->normalizeLocationName($candidate);
+        if ($candidateNorm === '') {
+            return [
+                'county_code' => (string) $county['county_code'],
+                'county_name' => (string) $county['name'],
+                'locality_siruta' => 0,
+                'locality_name' => '',
+                'locality_display_name' => '',
+            ];
+        }
+
+        $parentNorm = '';
+        if (isset($parts[1])) {
+            $parent = preg_replace('/^(COMUNA|ORASUL|ORAS|MUNICIPIUL)\s+/iu', '', $parts[1]) ?? $parts[1];
+            $parentNorm = $this->normalizeLocationName($parent);
+        }
+
+        $sql = 'SELECT *
+                FROM siruta_localities
+                WHERE county_code = ? AND normalized_name = ?';
+        $params = [(string) $county['county_code'], $candidateNorm];
+        if ($postalCode !== '') {
+            $sql .= ' ORDER BY (postal_code = ?) DESC, display_name LIMIT 20';
+            $params[] = $postalCode;
+        } else {
+            $sql .= ' ORDER BY display_name LIMIT 20';
+        }
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+        $matches = $stmt->fetchAll();
+
+        $locality = $matches[0] ?? null;
+        if ($parentNorm !== '') {
+            foreach ($matches as $match) {
+                if ($this->normalizeLocationName((string) $match['parent_name']) === $parentNorm) {
+                    $locality = $match;
+                    break;
+                }
+            }
+        }
+
+        return [
+            'county_code' => (string) $county['county_code'],
+            'county_name' => (string) $county['name'],
+            'locality_siruta' => $locality ? (int) $locality['siruta_code'] : 0,
+            'locality_name' => $locality ? (string) $locality['name'] : '',
+            'locality_display_name' => $locality ? (string) $locality['display_name'] : '',
+        ];
+    }
+
+    private function cleanCompanyAddress(string $address, string $countyName, string $localityName, string $postalCode): string
+    {
+        $parts = array_values(array_filter(array_map('trim', explode(',', $address)), fn ($part) => $part !== ''));
+        if (!$parts) {
+            return '';
+        }
+
+        $countyNorm = $this->normalizeLocationName($countyName);
+        $localityNorm = $this->normalizeLocationName($localityName);
+        $postalCode = trim($postalCode);
+        $clean = [];
+
+        foreach ($parts as $part) {
+            $normalized = $this->normalizeLocationName($part);
+            if ($postalCode !== '' && preg_replace('/\D+/', '', $part) === $postalCode) {
+                continue;
+            }
+            if ($countyNorm !== '' && str_contains($normalized, $countyNorm)) {
+                continue;
+            }
+            if ($localityNorm !== '' && ($normalized === $localityNorm || str_contains($normalized, $localityNorm))) {
+                continue;
+            }
+            if (in_array($normalized, ['ROMANIA', 'RO'], true)) {
+                continue;
+            }
+            $clean[] = $part;
+        }
+
+        if (!$clean) {
+            $clean = [$parts[0]];
+        }
+
+        return implode(', ', array_unique($clean));
+    }
+
+    private function normalizeLocationName(string $value): string
+    {
+        if (function_exists('mb_convert_encoding')) {
+            try {
+                $value = mb_convert_encoding($value, 'UTF-8', 'ISO-8859-2, UTF-8');
+            } catch (ValueError) {
+            }
+        }
+        $value = strtr($value, [
+            'Ă' => 'A', 'Â' => 'A', 'Î' => 'I', 'Ș' => 'S', 'Ş' => 'S', 'Ț' => 'T', 'Ţ' => 'T',
+            'ă' => 'a', 'â' => 'a', 'î' => 'i', 'ș' => 's', 'ş' => 's', 'ț' => 't', 'ţ' => 't',
+            'Þ' => 'T', 'þ' => 't', 'ª' => 'S', 'º' => 's',
+        ]);
+        $value = strtoupper($value);
+        $value = preg_replace('/[^A-Z0-9]+/', ' ', $value) ?? $value;
+        return trim(preg_replace('/\s+/', ' ', $value) ?? $value);
+    }
+
     public function searchCustomers(string $customerType, string $term): array
     {
         $customerType = $customerType === 'PJ' ? 'PJ' : 'PF';
@@ -1138,15 +1574,30 @@ final class App
             return [];
         }
 
-        $field = $customerType === 'PJ' ? 'cui' : 'phone';
+        if ($customerType === 'PJ') {
+            $stmt = $this->pdo->prepare(
+                "SELECT id, customer_type, name, phone, address, identifier, cui, representative,
+                        county_code, county_name, locality_siruta, locality_name, postal_code,
+                        registry_number, legal_form, vat_status, external_source, external_checked_at
+                 FROM customers
+                 WHERE customer_type = ? AND (identifier LIKE ? OR cui LIKE ?)
+                 ORDER BY id DESC
+                 LIMIT 8"
+            );
+            $stmt->execute([$customerType, '%' . $term . '%', '%' . $term . '%']);
+            return $stmt->fetchAll();
+        }
+
         $stmt = $this->pdo->prepare(
-            "SELECT id, customer_type, name, phone, address, cui, representative
+            "SELECT id, customer_type, name, phone, address, identifier, cui, representative,
+                    county_code, county_name, locality_siruta, locality_name, postal_code,
+                    registry_number, legal_form, vat_status, external_source, external_checked_at
              FROM customers
-             WHERE customer_type = ? AND $field LIKE ?
+             WHERE customer_type = ? AND (phone LIKE ? OR identifier LIKE ? OR cui LIKE ?)
              ORDER BY id DESC
              LIMIT 8"
         );
-        $stmt->execute([$customerType, '%' . $term . '%']);
+        $stmt->execute([$customerType, '%' . $term . '%', '%' . $term . '%', '%' . $term . '%']);
         return $stmt->fetchAll();
     }
 
@@ -1161,7 +1612,29 @@ final class App
             if (!$existing) {
                 throw new RuntimeException('Clientul selectat nu mai exista.');
             }
-            return $existing;
+            $customerPayload = [
+                'customer_type' => $customerType,
+                'name' => $customerType === 'PJ'
+                    ? trim((string) ($data['customer_name_pj'] ?? $data['customer_name']))
+                    : trim((string) $data['customer_name']),
+                'phone' => $customerType === 'PJ'
+                    ? trim((string) ($data['customer_phone_pj'] ?? $data['customer_phone']))
+                    : trim((string) $data['customer_phone']),
+                'address' => $customerType === 'PJ'
+                    ? trim((string) ($data['customer_address_pj'] ?? $data['customer_address']))
+                    : trim((string) $data['customer_address']),
+                'identifier' => $customerType === 'PJ'
+                    ? trim((string) ($data['customer_cui'] ?? ''))
+                    : trim((string) ($data['customer_identifier'] ?? '')),
+                'cui' => trim((string) ($data['customer_cui'] ?? '')),
+                'representative' => trim((string) ($data['customer_representative'] ?? '')),
+            ] + $this->customerLocationPayload($data);
+            $this->updateCustomer($existingCustomerId, $customerPayload);
+            $updated = $this->find('customers', $existingCustomerId);
+            if (!$updated) {
+                throw new RuntimeException('Clientul nu a putut fi actualizat.');
+            }
+            return $updated;
         }
 
         $customerId = $this->upsertCustomer([
@@ -1175,10 +1648,13 @@ final class App
             'address' => $customerType === 'PJ'
                 ? trim((string) ($data['customer_address_pj'] ?? $data['customer_address']))
                 : trim((string) $data['customer_address']),
+            'identifier' => $customerType === 'PJ'
+                ? trim((string) ($data['customer_cui'] ?? ''))
+                : trim((string) ($data['customer_identifier'] ?? '')),
             'cui' => trim((string) ($data['customer_cui'] ?? '')),
             'representative' => trim((string) ($data['customer_representative'] ?? '')),
             'known_customer' => !empty($data['known_customer']),
-        ]);
+        ] + $this->customerLocationPayload($data));
 
         $created = $this->find('customers', $customerId);
         if (!$created) {
@@ -1193,24 +1669,92 @@ final class App
             throw new RuntimeException('Numele, telefonul si adresa sunt obligatorii.');
         }
 
-        if ($customer['customer_type'] === 'PJ' && ($customer['cui'] === '' || $customer['representative'] === '')) {
+        if ($customer['customer_type'] === 'PJ' && ($customer['identifier'] === '' || $customer['representative'] === '')) {
             throw new RuntimeException('Pentru PJ sunt obligatorii CUI-ul si reprezentantul.');
         }
 
         $stmt = $this->pdo->prepare(
-            'INSERT INTO customers (customer_type, name, phone, address, cui, representative, known_customer)
-             VALUES (?, ?, ?, ?, ?, ?, ?)'
+            'INSERT INTO customers
+            (customer_type, name, phone, address, identifier, cui, representative, county_code, county_name,
+             locality_siruta, locality_name, postal_code, registry_number, legal_form, vat_status, external_source,
+             external_checked_at, known_customer)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         );
         $stmt->execute([
             $customer['customer_type'],
             $customer['name'],
             $customer['phone'],
             $customer['address'],
+            $customer['identifier'],
             $customer['cui'],
             $customer['representative'],
+            $customer['county_code'],
+            $customer['county_name'],
+            $customer['locality_siruta'] ?: null,
+            $customer['locality_name'],
+            $customer['postal_code'],
+            $customer['registry_number'],
+            $customer['legal_form'],
+            $customer['vat_status'],
+            $customer['external_source'],
+            $customer['external_checked_at'] ?: null,
             $customer['known_customer'] ? 1 : 0,
         ]);
         return (int) $this->pdo->lastInsertId();
+    }
+
+    private function updateCustomer(int $customerId, array $customer): void
+    {
+        if ($customer['name'] === '' || $customer['phone'] === '' || $customer['address'] === '') {
+            throw new RuntimeException('Numele, telefonul si adresa sunt obligatorii.');
+        }
+
+        if ($customer['customer_type'] === 'PJ' && ($customer['identifier'] === '' || $customer['representative'] === '')) {
+            throw new RuntimeException('Pentru PJ sunt obligatorii CUI-ul si reprezentantul.');
+        }
+
+        $this->pdo->prepare(
+            'UPDATE customers
+             SET customer_type = ?, name = ?, phone = ?, address = ?, identifier = ?, cui = ?, representative = ?,
+                 county_code = ?, county_name = ?, locality_siruta = ?, locality_name = ?, postal_code = ?,
+                 registry_number = ?, legal_form = ?, vat_status = ?, external_source = ?, external_checked_at = ?
+             WHERE id = ?'
+        )->execute([
+            $customer['customer_type'],
+            $customer['name'],
+            $customer['phone'],
+            $customer['address'],
+            $customer['identifier'],
+            $customer['cui'],
+            $customer['representative'],
+            $customer['county_code'],
+            $customer['county_name'],
+            $customer['locality_siruta'] ?: null,
+            $customer['locality_name'],
+            $customer['postal_code'],
+            $customer['registry_number'],
+            $customer['legal_form'],
+            $customer['vat_status'],
+            $customer['external_source'],
+            $customer['external_checked_at'] ?: null,
+            $customerId,
+        ]);
+    }
+
+    private function customerLocationPayload(array $data): array
+    {
+        return [
+            'county_code' => trim((string) ($data['customer_county_code'] ?? '')),
+            'county_name' => trim((string) ($data['customer_county_name'] ?? '')),
+            'locality_siruta' => (int) ($data['customer_locality_siruta'] ?? 0),
+            'locality_name' => trim((string) ($data['customer_locality_name'] ?? '')),
+            'postal_code' => trim((string) ($data['customer_postal_code'] ?? '')),
+            'registry_number' => trim((string) ($data['customer_registry_number'] ?? '')),
+            'legal_form' => trim((string) ($data['customer_legal_form'] ?? '')),
+            'vat_status' => trim((string) ($data['customer_vat_status'] ?? '')),
+            'external_source' => trim((string) ($data['customer_external_source'] ?? '')),
+            'external_checked_at' => trim((string) ($data['customer_external_checked_at'] ?? '')),
+        ];
     }
 
     private function upsertSupplier(string $name, string $type, string $cui): int
@@ -1333,8 +1877,12 @@ final class App
             'company_registry_number' => (string) ($company['registry_number'] ?? ''),
             'company_address' => (string) ($company['address'] ?? ''),
             'store_name' => (string) ($store['name'] ?? ''),
+            'store_code' => (string) ($store['code'] ?? ''),
             'store_address' => (string) ($store['address'] ?? ''),
             'operator_name' => '',
+            'processor_name' => '',
+            'processor_identifier' => '',
+            'processor_address' => '',
             'customer_name' => '',
             'customer_identifier' => '',
             'customer_address' => '',
@@ -1344,6 +1892,29 @@ final class App
             'gross_wax_kg' => '',
             'package_count' => '',
             'wax_observations' => '',
+            'wax_processed_kg' => '',
+            'wax_returned_kg' => '',
+            'shrinkage_pct' => '',
+            'foundation_delivered_kg' => '',
+            'service_value' => '',
+            'nir_number' => $this->formatDocumentLabel($doc),
+            'nir_date' => date('Y-m-d', strtotime((string) ($doc['created_at'] ?? 'now'))),
+            'aviz_number' => '',
+            'aviz_date' => '',
+            'adjustment_type' => '',
+            'adjustment_label' => '',
+            'foundation_qty_kg' => '',
+            'foundation_qty_g' => '',
+            'factory_batch_number' => '',
+            'factory_wax_total_kg' => '',
+            'factory_foundation_expected_kg' => '',
+            'factory_items_rows' => '',
+            'item_name' => 'Faguri ceara',
+            'item_unit' => 'kg',
+            'item_qty' => '',
+            'item_unit_price' => '',
+            'item_value' => '',
+            'notes' => '',
             'app_name' => 'Ceara',
             'generated_at' => date('Y-m-d H:i'),
         ];
@@ -1362,7 +1933,7 @@ final class App
 
         if ($lotId > 0) {
             $stmt = $this->pdo->prepare(
-                'SELECT p.*, c.name AS customer_name, c.customer_type, c.phone, c.address, c.cui
+                'SELECT p.*, c.name AS customer_name, c.customer_type, c.phone, c.address, c.identifier, c.cui
                  FROM processing_lots p
                  JOIN customers c ON c.id = p.customer_id
                  WHERE p.id = ?'
@@ -1371,19 +1942,82 @@ final class App
             $lot = $stmt->fetch();
             if ($lot) {
                 $variables['customer_name'] = (string) $lot['customer_name'];
-                $variables['customer_identifier'] = (string) ($lot['cui'] ?? '');
+                $variables['customer_identifier'] = (string) ($lot['identifier'] ?: ($lot['cui'] ?? ''));
                 $variables['customer_address'] = (string) ($lot['address'] ?? '');
                 $variables['customer_phone'] = (string) ($lot['phone'] ?? '');
                 $variables['customer_type'] = (string) ($lot['customer_type'] ?? '');
                 $variables['lot_number'] = (string) $lot['lot_number'];
                 $variables['gross_wax_kg'] = grams_to_kg((int) $lot['gross_g']);
+                $variables['shrinkage_pct'] = rtrim(rtrim(number_format((float) $lot['shrinkage_pct'], 3, '.', ''), '0'), '.');
+            }
+        }
+
+        if (!empty($store['processor_id'])) {
+            $processor = $this->find('processors', (int) $store['processor_id']);
+            if ($processor) {
+                $variables['processor_name'] = (string) ($processor['name'] ?? '');
+                $variables['processor_identifier'] = (string) ($processor['cui'] ?? '');
+                $variables['processor_address'] = (string) ($processor['address'] ?? '');
+            }
+        }
+
+        if ((string) $doc['reference_type'] === 'factory_buffer_adjustment') {
+            $adjustment = $this->find('factory_buffer_adjustments', (int) $doc['reference_id']);
+            if ($adjustment) {
+                $qty = (int) $adjustment['qty_g'];
+                $type = (string) $adjustment['adjustment_type'];
+                $variables['aviz_number'] = (string) $adjustment['aviz_number'];
+                $variables['aviz_date'] = date('Y-m-d', strtotime((string) ($adjustment['created_at'] ?? $doc['created_at'] ?? 'now')));
+                $variables['adjustment_type'] = $type;
+                $variables['adjustment_label'] = $type === 'minus' ? 'Iesire buffer faguri' : 'Intrare buffer faguri';
+                $variables['foundation_qty_kg'] = grams_to_kg($qty);
+                $variables['foundation_qty_g'] = (string) $qty;
+                $variables['item_qty'] = grams_to_kg($qty);
+                $variables['notes'] = nl2br(h((string) ($adjustment['notes'] ?? '')));
+            }
+        }
+
+        $factoryBatchId = (int) ($doc['factory_batch_id'] ?? 0);
+        if ($factoryBatchId <= 0 && (string) $doc['reference_type'] === 'factory_batch') {
+            $factoryBatchId = (int) $doc['reference_id'];
+        }
+
+        if ($factoryBatchId > 0) {
+            $stmt = $this->pdo->prepare(
+                'SELECT b.*, p.name AS processor_name, p.cui AS processor_cui, p.address AS processor_address
+                 FROM factory_batches b
+                 JOIN processors p ON p.id = b.processor_id
+                 WHERE b.id = ?'
+            );
+            $stmt->execute([$factoryBatchId]);
+            $batch = $stmt->fetch();
+            if ($batch) {
+                $variables['factory_batch_number'] = (string) $batch['batch_number'];
+                $variables['factory_wax_total_kg'] = grams_to_kg((int) $batch['wax_g']);
+                $variables['factory_foundation_expected_kg'] = grams_to_kg((int) $batch['foundation_g']);
+                $variables['processor_name'] = (string) ($batch['processor_name'] ?? '');
+                $variables['processor_identifier'] = (string) ($batch['processor_cui'] ?? '');
+                $variables['processor_address'] = (string) ($batch['processor_address'] ?? '');
+                $variables['factory_items_rows'] = $this->factoryBatchItemsRows($factoryBatchId);
             }
         }
 
         if (!empty($doc['movement_id'])) {
             $movement = $this->find('processing_lot_movements', (int) $doc['movement_id']);
             if ($movement) {
-                $variables['wax_observations'] = nl2br(h((string) ($movement['notes'] ?? '')));
+                if ($variables['operator_name'] === '' && !empty($movement['created_by'])) {
+                    $movementUser = $this->find('users', (int) $movement['created_by']);
+                    if ($movementUser) {
+                        $variables['operator_name'] = (string) ($movementUser['full_name'] ?: $movementUser['username']);
+                    }
+                }
+                $notes = nl2br(h((string) ($movement['notes'] ?? '')));
+                $variables['wax_observations'] = $notes;
+                $variables['notes'] = $notes;
+                $variables['wax_processed_kg'] = grams_to_kg((int) ($movement['wax_g'] ?? 0));
+                $variables['wax_returned_kg'] = grams_to_kg((int) ($movement['wax_g'] ?? 0));
+                $variables['foundation_delivered_kg'] = grams_to_kg((int) ($movement['foundation_g'] ?? 0));
+                $variables['service_value'] = money((int) ($movement['service_value_cents'] ?? 0));
             }
         }
 
@@ -1400,8 +2034,12 @@ final class App
             'company_registry_number' => 'J00/000/2026',
             'company_address' => 'Adresa societate',
             'store_name' => 'Gestiune principala',
+            'store_code' => 'GEST1',
             'store_address' => 'Adresa gestiune',
             'operator_name' => 'Administrator',
+            'processor_name' => 'Procesator Exemplu',
+            'processor_identifier' => 'RO12345678',
+            'processor_address' => 'Adresa procesator',
             'customer_name' => 'Client Exemplu',
             'customer_identifier' => 'CNP/CUI exemplu',
             'customer_address' => 'Localitate exemplu',
@@ -1411,9 +2049,63 @@ final class App
             'gross_wax_kg' => '10.000',
             'package_count' => '1',
             'wax_observations' => 'Ceara bruta receptionata pentru procesare.',
+            'wax_processed_kg' => '10.000',
+            'wax_returned_kg' => '4.000',
+            'shrinkage_pct' => '2',
+            'foundation_delivered_kg' => '9.800',
+            'service_value' => '30.00 lei',
+            'nir_number' => 'NIR-GEST1-1',
+            'nir_date' => date('Y-m-d'),
+            'aviz_number' => 'AVZ-123',
+            'aviz_date' => date('Y-m-d'),
+            'adjustment_type' => 'plus',
+            'adjustment_label' => 'Intrare buffer faguri',
+            'foundation_qty_kg' => '25,000 kg',
+            'foundation_qty_g' => '25000',
+            'factory_batch_number' => 'FAB-20260617-ABC123',
+            'factory_wax_total_kg' => '36,000 kg',
+            'factory_foundation_expected_kg' => '35,280 kg',
+            'factory_items_rows' => '<tr><td class="text-center">1</td><td>PROC-20260617-ABC123</td><td>Client Exemplu</td><td class="text-right">36,000 kg</td></tr>',
+            'item_name' => 'Faguri ceara',
+            'item_unit' => 'kg',
+            'item_qty' => '25,000 kg',
+            'item_unit_price' => '',
+            'item_value' => '',
+            'notes' => 'Receptie faguri conform aviz fabrica.',
             'app_name' => 'Ceara',
             'generated_at' => date('Y-m-d H:i'),
         ];
+    }
+
+    private function factoryBatchItemsRows(int $batchId): string
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT i.wax_g, p.lot_number, c.name AS customer_name
+             FROM factory_batch_items i
+             JOIN processing_lots p ON p.id = i.processing_lot_id
+             JOIN customers c ON c.id = p.customer_id
+             WHERE i.batch_id = ?
+             ORDER BY i.id ASC'
+        );
+        $stmt->execute([$batchId]);
+
+        $rows = [];
+        $index = 1;
+        foreach ($stmt->fetchAll() as $item) {
+            $rows[] = '<tr>'
+                . '<td class="text-center">' . $index . '</td>'
+                . '<td>' . h((string) $item['lot_number']) . '</td>'
+                . '<td>' . h((string) $item['customer_name']) . '</td>'
+                . '<td class="text-right">' . h(grams_to_kg((int) $item['wax_g'])) . '</td>'
+                . '</tr>';
+            $index++;
+        }
+
+        if (!$rows) {
+            return '<tr><td colspan="4" class="text-center">Nu exista loturi pe acest aviz.</td></tr>';
+        }
+
+        return implode('', $rows);
     }
 
     private function renderTemplate(string $html, array $variables): string
@@ -1560,11 +2252,14 @@ final class App
         $lossFoundation = $foundation('RECORD_LOSS');
 
         $waxCustody = max(0, $received - $sentFactory - $returned - $lossWax);
-        $waxAvailableForExchange = max(0, $received - $exchanged - $returned - $lossWax);
-        $waxToFactory = max(0, $exchanged - $sentFactory);
-        $openRejectedWax = max(0, $rejected - $returned - $lossWax);
-        $foundationToRecover = max(0, $this->foundationForWax($openRejectedWax, (float) $lot['shrinkage_pct']) - $foundationRecovered - $lossFoundation);
-        $foundationToClient = max(0, $foundationReceived - $foundationDelivered);
+        $waxAvailableForExchange = max(0, $received - $exchanged - $sentFactory - $returned - $rejected - $lossWax);
+        $waxToFactory = max(0, $exchanged - $sentFactory - $rejected);
+        $openRejectedWax = max(0, $rejected - $lossWax);
+        $exchangedWaxNotSentFactory = max(0, $exchanged - $sentFactory);
+        $rejectedWaxWithFoundationDelivered = min($openRejectedWax, $exchangedWaxNotSentFactory);
+        $foundationToRecover = max(0, $this->foundationForWax($rejectedWaxWithFoundationDelivered, (float) $lot['shrinkage_pct']) - $foundationRecovered - $lossFoundation);
+        $foundationExpectedForClient = $this->foundationForWax($exchanged, (float) $lot['shrinkage_pct']);
+        $foundationToClient = max(0, $foundationExpectedForClient - $foundationDelivered);
 
         $status = 'Procesare';
         if ($foundationToRecover > 0) {
@@ -1808,6 +2503,31 @@ final class App
         $stmt = $this->pdo->prepare('SELECT COALESCE(SUM(qty_g), 0) FROM inventory_transactions WHERE movement_type = ? AND store_id = ?');
         $stmt->execute([$type, $storeId]);
         return (int) $stmt->fetchColumn();
+    }
+
+    private function sumInventoryForStoreUntil(string $type, int $storeId, string $dateTime, bool $inclusive): int
+    {
+        $operator = $inclusive ? '<=' : '<';
+        $stmt = $this->pdo->prepare(
+            "SELECT COALESCE(SUM(qty_g), 0)
+             FROM inventory_transactions
+             WHERE movement_type = ?
+               AND store_id = ?
+               AND created_at $operator ?"
+        );
+        $stmt->execute([$type, $storeId, $dateTime]);
+        return (int) $stmt->fetchColumn();
+    }
+
+    private function normalizeDate(string $date): string
+    {
+        $date = trim($date);
+        if ($date === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+            return '';
+        }
+
+        $parts = array_map('intval', explode('-', $date));
+        return checkdate($parts[1], $parts[2], $parts[0]) ? $date : '';
     }
 
     private function countRows(string $table, string $where): int

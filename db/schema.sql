@@ -56,10 +56,49 @@ CREATE TABLE IF NOT EXISTS customers (
     name VARCHAR(160) NOT NULL,
     phone VARCHAR(80) NOT NULL DEFAULT '',
     address VARCHAR(255) NOT NULL DEFAULT '',
+    identifier VARCHAR(40) NOT NULL DEFAULT '',
     cui VARCHAR(40) NOT NULL DEFAULT '',
     representative VARCHAR(160) NOT NULL DEFAULT '',
+    county_code VARCHAR(10) NOT NULL DEFAULT '',
+    county_name VARCHAR(80) NOT NULL DEFAULT '',
+    locality_siruta INT NULL,
+    locality_name VARCHAR(160) NOT NULL DEFAULT '',
+    postal_code VARCHAR(20) NOT NULL DEFAULT '',
+    registry_number VARCHAR(80) NOT NULL DEFAULT '',
+    legal_form VARCHAR(40) NOT NULL DEFAULT '',
+    vat_status VARCHAR(80) NOT NULL DEFAULT '',
+    external_source VARCHAR(40) NOT NULL DEFAULT '',
+    external_checked_at TIMESTAMP NULL,
     known_customer TINYINT(1) NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS siruta_counties (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    county_code VARCHAR(10) NOT NULL UNIQUE,
+    siruta_code INT NOT NULL,
+    name VARCHAR(80) NOT NULL,
+    normalized_name VARCHAR(80) NOT NULL,
+    INDEX idx_county_name (normalized_name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS siruta_localities (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    siruta_code INT NOT NULL UNIQUE,
+    county_code VARCHAR(10) NOT NULL,
+    name VARCHAR(160) NOT NULL,
+    normalized_name VARCHAR(160) NOT NULL,
+    display_name VARCHAR(220) NOT NULL,
+    postal_code VARCHAR(20) NOT NULL DEFAULT '',
+    parent_siruta INT NULL,
+    parent_name VARCHAR(160) NOT NULL DEFAULT '',
+    parent_type VARCHAR(40) NOT NULL DEFAULT '',
+    type_code INT NOT NULL DEFAULT 0,
+    level_no INT NOT NULL DEFAULT 0,
+    duplicate_name_in_county TINYINT(1) NOT NULL DEFAULT 0,
+    INDEX idx_locality_county_name (county_code, normalized_name),
+    INDEX idx_locality_parent (parent_siruta),
+    FOREIGN KEY (county_code) REFERENCES siruta_counties(county_code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS suppliers (
@@ -203,6 +242,7 @@ CREATE TABLE IF NOT EXISTS documents (
     reference_id INT NOT NULL,
     status VARCHAR(40) NOT NULL DEFAULT 'draft',
     file_path VARCHAR(255) NULL,
+    external_url VARCHAR(500) NULL,
     notes TEXT NULL,
     created_by INT NULL,
     printed_at TIMESTAMP NULL,

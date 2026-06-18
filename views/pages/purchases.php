@@ -22,7 +22,7 @@
             </select>
         </label>
         <label>
-            CUI/CNP
+            CUI/CNP/CI
             <input name="supplier_cui" placeholder="Optional">
         </label>
         <label>

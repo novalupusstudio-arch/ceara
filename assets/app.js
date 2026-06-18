@@ -9,6 +9,10 @@ document.addEventListener("submit", (event) => {
 });
 
 document.addEventListener("DOMContentLoaded", () => {
+  function formatKg(value) {
+    return `${Number(value || 0).toFixed(3).replace(".", ",")} kg`;
+  }
+
   const factoryForm = document.querySelector("[data-factory-form]");
   if (factoryForm) {
     const totalWax = factoryForm.querySelector("[data-factory-total-wax]");
@@ -62,13 +66,13 @@ document.addEventListener("DOMContentLoaded", () => {
         costCents += rowCostCents;
 
         rowCost.textContent = `${(rowCostCents / 100).toFixed(2)} lei`;
-        rowFoundation.textContent = `${rowFoundationKg.toFixed(3)} kg`;
+        rowFoundation.textContent = formatKg(rowFoundationKg);
       });
 
-      totalWax.value = `${waxKg.toFixed(3)} kg`;
-      totalReject.value = `${rejectKg.toFixed(3)} kg`;
+      totalWax.value = formatKg(waxKg);
+      totalReject.value = formatKg(rejectKg);
       totalCost.value = `${(costCents / 100).toFixed(2)} lei`;
-      totalFoundation.value = `${foundationKg.toFixed(3)} kg`;
+      totalFoundation.value = formatKg(foundationKg);
     }
 
     factoryForm.querySelectorAll("[data-factory-qty], [data-factory-reject-qty]").forEach((input) => {
@@ -107,7 +111,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const foundationKg = Math.max(0, waxKg * (1 - (shrinkagePct / 100)));
       const serviceCents = Math.max(0, Math.round(waxKg * priceCents));
 
-      foundationOutput.value = `${foundationKg.toFixed(3)} kg`;
+      foundationOutput.value = formatKg(foundationKg);
       serviceOutput.value = `${(serviceCents / 100).toFixed(2)} lei`;
     }
 
@@ -162,11 +166,22 @@ document.addEventListener("DOMContentLoaded", () => {
   const customerName = form.querySelector("[data-customer-name]");
   const customerPhone = form.querySelector("[data-customer-phone]");
   const customerAddress = form.querySelector("[data-customer-address]");
+  const customerIdentifier = form.querySelector("[data-customer-identifier]");
   const customerNamePj = form.querySelector("[data-customer-name-pj]");
   const customerAddressPj = form.querySelector("[data-customer-address-pj]");
   const customerPhonePj = form.querySelector("[data-customer-phone-pj]");
   const customerCui = form.querySelector("[data-customer-cui]");
   const customerRepresentative = form.querySelector("[data-customer-representative]");
+  const customerCounty = form.querySelector("[data-customer-county]");
+  const customerLocality = form.querySelector("[data-customer-locality]");
+  const customerCountyName = form.querySelector("[data-customer-county-name]");
+  const customerLocalityName = form.querySelector("[data-customer-locality-name]");
+  const customerPostalCode = form.querySelector("[data-customer-postal-code]");
+  const customerRegistryNumber = form.querySelector("[data-customer-registry-number]");
+  const customerLegalForm = form.querySelector("[data-customer-legal-form]");
+  const customerVatStatus = form.querySelector("[data-customer-vat-status]");
+  const customerExternalSource = form.querySelector("[data-customer-external-source]");
+  const customerExternalCheckedAt = form.querySelector("[data-customer-external-checked-at]");
   const processorSelect = form.querySelector("[data-processor-select]");
   const processingPrice = form.querySelector("[data-processing-price]");
   const processingShrinkage = form.querySelector("[data-processing-shrinkage]");
@@ -179,6 +194,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const pjFields = form.querySelectorAll("[data-pj-field]");
 
   let lookupTimer = null;
+  let anafLookupSeq = 0;
+  let localityLookupSeq = 0;
 
   function customerType() {
     const checked = Array.from(customerTypeInputs).find((input) => input.checked);
@@ -195,6 +212,7 @@ document.addEventListener("DOMContentLoaded", () => {
       customerName,
       customerPhone,
       customerAddress,
+      customerIdentifier,
       customerNamePj,
       customerAddressPj,
       customerPhonePj,
@@ -207,14 +225,118 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  function setLegalMeta(customer) {
+    customerRegistryNumber.value = customer.registry_number || "";
+    customerLegalForm.value = customer.legal_form || "";
+    customerVatStatus.value = customer.vat_status || "";
+    customerExternalSource.value = customer.external_source || "";
+    customerExternalCheckedAt.value = customer.external_checked_at || "";
+  }
+
+  function syncLocationHiddenFields() {
+    const countyOption = customerCounty ? customerCounty.selectedOptions[0] : null;
+    const localityOption = customerLocality ? customerLocality.selectedOptions[0] : null;
+    customerCountyName.value = countyOption && countyOption.value ? (countyOption.dataset.name || countyOption.textContent || "") : "";
+    customerLocalityName.value = localityOption && localityOption.value ? (localityOption.dataset.name || localityOption.textContent || "") : "";
+    customerPostalCode.value = localityOption && localityOption.value ? (localityOption.dataset.postalCode || customerPostalCode.value || "") : customerPostalCode.value;
+  }
+
+  function resetLocationFields() {
+    if (customerCounty) {
+      customerCounty.value = "";
+    }
+    if (customerLocality) {
+      customerLocality.innerHTML = '<option value="">Alege localitate</option>';
+      customerLocality.disabled = true;
+    }
+    customerCountyName.value = "";
+    customerLocalityName.value = "";
+    customerPostalCode.value = "";
+  }
+
+  function populateCounties() {
+    if (!customerCounty) {
+      return Promise.resolve();
+    }
+    return fetch("index.php?page=counties_lookup", { headers: { Accept: "application/json" } })
+      .then((response) => response.json())
+      .then((payload) => {
+        const selected = customerCounty.value;
+        customerCounty.innerHTML = '<option value="">Alege judet</option>';
+        (payload.counties || []).forEach((county) => {
+          const option = document.createElement("option");
+          option.value = county.county_code;
+          option.textContent = county.name;
+          option.dataset.name = county.name;
+          customerCounty.appendChild(option);
+        });
+        customerCounty.value = selected;
+      })
+      .catch(() => {});
+  }
+
+  function populateLocalities(countyCode, selectedSiruta = "", selectedName = "") {
+    const lookupSeq = ++localityLookupSeq;
+    if (!customerLocality) {
+      return Promise.resolve();
+    }
+    customerLocality.innerHTML = '<option value="">Alege localitate</option>';
+    customerLocality.disabled = !countyCode;
+    if (!countyCode) {
+      syncLocationHiddenFields();
+      return Promise.resolve();
+    }
+
+    const params = new URLSearchParams({ page: "localities_lookup", county_code: countyCode });
+    return fetch(`index.php?${params.toString()}`, { headers: { Accept: "application/json" } })
+      .then((response) => response.json())
+      .then((payload) => {
+        if (lookupSeq !== localityLookupSeq) {
+          return;
+        }
+        (payload.localities || []).forEach((locality) => {
+          const option = document.createElement("option");
+          option.value = locality.siruta_code;
+          option.textContent = locality.display_name || locality.name;
+          option.dataset.name = locality.name || "";
+          option.dataset.postalCode = locality.postal_code || "";
+          customerLocality.appendChild(option);
+        });
+        if (selectedSiruta) {
+          customerLocality.value = String(selectedSiruta);
+        }
+        if (!customerLocality.value && selectedName) {
+          const normalized = selectedName.toLowerCase();
+          const option = Array.from(customerLocality.options).find((item) => {
+            return (item.dataset.name || item.textContent || "").toLowerCase() === normalized;
+          });
+          if (option) {
+            customerLocality.value = option.value;
+          }
+        }
+        syncLocationHiddenFields();
+      })
+      .catch(() => {});
+  }
+
+  function applyCustomerLocation(customer) {
+    if (!customerCounty) {
+      return;
+    }
+    customerCounty.value = customer.county_code || "";
+    customerCountyName.value = customer.county_name || "";
+    customerPostalCode.value = customer.postal_code || "";
+    populateLocalities(customer.county_code || "", customer.locality_siruta || "", customer.locality_name || customer.locality_display_name || "");
+  }
+
   function switchCustomerMode(nextType) {
     const isPJ = nextType === "PJ";
     nameLabel.textContent = "Nume client";
     phoneLabel.textContent = "Telefon";
     customerName.placeholder = "Nume client";
     customerAddress.placeholder = "Adresa client";
-    searchLabel.textContent = isPJ ? "Cautare dupa CUI" : "Cautare dupa telefon";
-    searchInput.placeholder = isPJ ? "RO123456" : "07xxxxxxxx";
+    searchLabel.textContent = isPJ ? "Cautare dupa CUI" : "Cautare dupa telefon/CNP/CI";
+    searchInput.placeholder = isPJ ? "RO123456" : "Telefon, CNP sau CI";
     customerName.required = !isPJ;
     customerPhone.required = !isPJ;
     customerAddress.required = !isPJ;
@@ -243,11 +365,15 @@ document.addEventListener("DOMContentLoaded", () => {
     customerName.value = "";
     customerPhone.value = "";
     customerAddress.value = "";
+    customerIdentifier.value = "";
     customerNamePj.value = "";
     customerAddressPj.value = "";
     customerPhonePj.value = "";
     customerCui.value = "";
     customerRepresentative.value = "";
+    resetLocationFields();
+    setLegalMeta({});
+    newCustomerButton.textContent = isPJ ? "Preia date ANAF" : "Client nou";
   }
 
   function renderProcessorValues() {
@@ -261,26 +387,29 @@ document.addEventListener("DOMContentLoaded", () => {
     const costCents = Math.max(0, Math.round(processingKg * cents));
     processingPrice.value = `${(cents / 100).toFixed(2)} lei`;
     processingShrinkage.value = shrinkage.toFixed(3);
-    processingExchange.value = `${exchangeKg.toFixed(3)} kg`;
+    processingExchange.value = formatKg(exchangeKg);
     processingCost.value = `${(costCents / 100).toFixed(2)} lei`;
   }
 
   function applyCustomer(customer) {
-    existingCustomerId.value = String(customer.id);
-    forceNewCustomer.value = "0";
+    existingCustomerId.value = customer.id ? String(customer.id) : "0";
+    forceNewCustomer.value = customer.id ? "0" : "1";
     const isPJ = customer.customer_type === "PJ";
     if (isPJ) {
       customerNamePj.value = customer.name || "";
       customerAddressPj.value = customer.address || "";
       customerPhonePj.value = customer.phone || "";
-      customerCui.value = customer.cui || "";
+      customerCui.value = customer.identifier || customer.cui || "";
       customerRepresentative.value = customer.representative || "";
     } else {
       customerName.value = customer.name || "";
       customerPhone.value = customer.phone || "";
       customerAddress.value = customer.address || "";
+      customerIdentifier.value = customer.identifier || customer.cui || "";
     }
-    setCustomerInputsReadOnly(true);
+    applyCustomerLocation(customer);
+    setLegalMeta(customer);
+    setCustomerInputsReadOnly(false);
     resetLookupResults();
   }
 
@@ -298,7 +427,7 @@ document.addEventListener("DOMContentLoaded", () => {
       button.className = "lookup-option";
       button.innerHTML = `
         <strong>${customer.name}</strong>
-        <span>${customer.customer_type === "PJ" ? customer.cui : customer.phone}</span>
+        <span>${customer.customer_type === "PJ" ? (customer.identifier || customer.cui || "") : [customer.phone, customer.identifier || customer.cui || ""].filter(Boolean).join(" / ")}</span>
         <small>${customer.address || ""}</small>
       `;
       button.addEventListener("click", () => applyCustomer(customer));
@@ -344,11 +473,73 @@ document.addEventListener("DOMContentLoaded", () => {
     existingCustomerId.value = "0";
     forceNewCustomer.value = "0";
     setCustomerInputsReadOnly(false);
+    if (customerType() === "PJ") {
+      customerNamePj.value = "";
+      customerAddressPj.value = "";
+      customerPhonePj.value = "";
+      customerCui.value = searchInput.value.trim();
+      customerRepresentative.value = "";
+      resetLocationFields();
+      setLegalMeta({});
+    }
     window.clearTimeout(lookupTimer);
     lookupTimer = window.setTimeout(lookupCustomers, 220);
   });
 
   newCustomerButton.addEventListener("click", () => {
+    if (customerType() === "PJ") {
+      const cui = (customerCui.value || searchInput.value || "").trim();
+      if (!cui) {
+        searchInput.focus();
+        return;
+      }
+
+      const currentLookup = ++anafLookupSeq;
+      existingCustomerId.value = "0";
+      forceNewCustomer.value = "1";
+      customerNamePj.value = "";
+      customerAddressPj.value = "";
+      customerPhonePj.value = "";
+      customerCui.value = cui;
+      customerRepresentative.value = "";
+      resetLocationFields();
+      setLegalMeta({});
+      resetLookupResults();
+      newCustomerButton.disabled = true;
+      newCustomerButton.textContent = "Preiau...";
+      fetch(`index.php?page=anaf_company_lookup&cui=${encodeURIComponent(cui)}`, {
+        headers: { Accept: "application/json" },
+      })
+        .then((response) => response.json().then((payload) => ({ ok: response.ok, payload })))
+        .then(({ ok, payload }) => {
+          if (currentLookup !== anafLookupSeq) {
+            return;
+          }
+          if (!ok) {
+            throw new Error(payload.error || "Preluarea ANAF nu a reusit.");
+          }
+          setCustomerInputsReadOnly(false);
+          resetLookupResults();
+          applyCustomer(payload.company || {});
+          customerPhonePj.focus();
+        })
+        .catch((error) => {
+          if (currentLookup !== anafLookupSeq) {
+            return;
+          }
+          resultsBox.innerHTML = `<div class="lookup-empty">${error.message || "Preluarea ANAF nu a reusit."}</div>`;
+          resultsBox.hidden = false;
+        })
+        .finally(() => {
+          if (currentLookup !== anafLookupSeq) {
+            return;
+          }
+          newCustomerButton.disabled = false;
+          newCustomerButton.textContent = "Preia date ANAF";
+        });
+      return;
+    }
+
     existingCustomerId.value = "0";
     forceNewCustomer.value = "1";
     setCustomerInputsReadOnly(false);
@@ -361,10 +552,25 @@ document.addEventListener("DOMContentLoaded", () => {
     customerPhonePj.value = "";
     customerCui.value = "";
     customerRepresentative.value = "";
+    resetLocationFields();
+    setLegalMeta({});
     searchInput.value = "";
     customerName.focus();
   });
 
+  if (customerCounty) {
+    customerCounty.addEventListener("change", () => {
+      customerPostalCode.value = "";
+      customerLocalityName.value = "";
+      syncLocationHiddenFields();
+      populateLocalities(customerCounty.value);
+    });
+  }
+  if (customerLocality) {
+    customerLocality.addEventListener("change", syncLocationHiddenFields);
+  }
+
+  populateCounties();
   switchCustomerMode(customerType());
   if (processorSelect.options.length > 0 && !processorSelect.value) {
     processorSelect.value = processorSelect.options[0].value;

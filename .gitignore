@@ -19,6 +19,7 @@ temp/
 .env.*
 !.env.example
 config/local.php
+config/fgo.local.php
 config/secrets.php
 config/xampp-target.local.txt
 deploy/local/

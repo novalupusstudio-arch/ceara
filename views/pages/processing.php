@@ -9,7 +9,6 @@ foreach ($data['processors'] as $processor) {
     ];
 }
 $defaultProcessorId = isset($data['default_processor']['id']) ? (int) $data['default_processor']['id'] : 0;
-$assignedStore = $data['assigned_store'] ?? null;
 ?>
 
 <header class="page-header">
@@ -49,75 +48,112 @@ $assignedStore = $data['assigned_store'] ?? null;
 
         <div class="lookup-results" data-lookup-results hidden></div>
 
-        <div class="form-grid">
-            <label data-pf-field data-name-field>
-                <span data-name-label>Nume client</span>
-                <input name="customer_name" required placeholder="Nume client PF" data-customer-name>
-            </label>
-            <label data-pf-field data-phone-field>
-                <span data-phone-label>Telefon</span>
-                <input name="customer_phone" required placeholder="07xxxxxxxx" data-customer-phone>
-            </label>
-            <label class="wide" data-pf-field data-common-field>
-                Adresa
-                <input name="customer_address" required placeholder="Adresa client" data-customer-address>
-            </label>
-            <label data-pj-field class="is-hidden" hidden style="display:none">
-                Nume PJ
-                <input name="customer_name_pj" placeholder="Denumire companie" data-customer-name-pj>
-            </label>
-            <label class="wide is-hidden" data-pj-field hidden style="display:none">
-                Adresa PJ
-                <input name="customer_address_pj" placeholder="Adresa sediu" data-customer-address-pj>
-            </label>
-            <label data-pj-field class="is-hidden" hidden style="display:none">
-                Telefon PJ
-                <input name="customer_phone_pj" placeholder="07xxxxxxxx" data-customer-phone-pj>
-            </label>
-            <label data-pj-field class="is-hidden" hidden style="display:none">
-                CUI
-                <input name="customer_cui" placeholder="RO123456" data-customer-cui>
-            </label>
-            <label class="wide is-hidden" data-pj-field hidden style="display:none">
-                Reprezentant
-                <input name="customer_representative" placeholder="Nume reprezentant" data-customer-representative>
-            </label>
+        <div class="processing-fields">
+            <div class="processing-row columns-3" data-pf-field>
+                <label data-name-field>
+                    <span data-name-label>Nume client</span>
+                    <input name="customer_name" required placeholder="Nume client PF" data-customer-name>
+                </label>
+                <label data-phone-field>
+                    <span data-phone-label>Telefon</span>
+                    <input name="customer_phone" required placeholder="07xxxxxxxx" data-customer-phone>
+                </label>
+                <label data-identifier-field>
+                    CNP/CI
+                    <input name="customer_identifier" placeholder="CJ123456" data-customer-identifier>
+                </label>
+            </div>
 
-            <label>
-                Cantitate ceara kg
-                <input name="gross_kg" required inputmode="decimal" placeholder="12.500">
-            </label>
-            <label>
-                Gestiune
-                <input value="<?= h($assignedStore ? $assignedStore['name'] : 'Fara gestiune alocata') ?>" readonly>
-            </label>
-            <label>
-                Procesator
-                <select name="processor_id" data-processor-select>
-                    <?php foreach ($data['processors'] as $processor): ?>
-                        <option value="<?= h((string) $processor['id']) ?>" <?= (int) $processor['id'] === $defaultProcessorId ? 'selected' : '' ?>>
-                            <?= h($processor['name']) ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-            </label>
-            <label>
-                Pret procesare
-                <input value="0.00 lei" readonly data-processing-price>
-            </label>
-            <label>
-                Scazamant %
-                <input value="0.000" readonly data-processing-shrinkage>
-            </label>
-            <label>
-                Cantitate ceara de dat la schimb
-                <input value="0.000 kg" readonly data-processing-exchange>
-            </label>
-            <label>
-                Cost procesare
-                <input value="0.00 lei" readonly data-processing-cost>
-            </label>
-            <button class="primary" type="submit">Creeaza lot</button>
+            <div class="processing-row columns-4 is-hidden" data-pj-field hidden style="display:none">
+                <label>
+                    Nume PJ
+                    <input name="customer_name_pj" placeholder="Denumire companie" data-customer-name-pj>
+                </label>
+                <label>
+                    CUI
+                    <input name="customer_cui" placeholder="RO123456" data-customer-cui>
+                </label>
+                <label>
+                    Telefon PJ
+                    <input name="customer_phone_pj" placeholder="07xxxxxxxx" data-customer-phone-pj>
+                </label>
+                <label>
+                    Reprezentant
+                    <input name="customer_representative" placeholder="Nume reprezentant" data-customer-representative>
+                </label>
+            </div>
+
+            <div class="processing-row columns-3">
+                <label>
+                    Judet
+                    <select name="customer_county_code" data-customer-county>
+                        <option value="">Alege judet</option>
+                    </select>
+                </label>
+                <label>
+                    Localitate
+                    <select name="customer_locality_siruta" data-customer-locality disabled>
+                        <option value="">Alege localitate</option>
+                    </select>
+                </label>
+                <label data-pf-field data-common-field>
+                    Adresa
+                    <input name="customer_address" required placeholder="Adresa client" data-customer-address>
+                </label>
+                <label class="is-hidden" data-pj-field hidden style="display:none">
+                    Adresa preluata
+                    <input name="customer_address_pj" placeholder="Strada, numar" data-customer-address-pj>
+                </label>
+            </div>
+
+            <input type="hidden" name="customer_county_name" data-customer-county-name>
+            <input type="hidden" name="customer_locality_name" data-customer-locality-name>
+            <input type="hidden" name="customer_postal_code" data-customer-postal-code>
+            <input type="hidden" name="customer_registry_number" data-customer-registry-number>
+            <input type="hidden" name="customer_legal_form" data-customer-legal-form>
+            <input type="hidden" name="customer_vat_status" data-customer-vat-status>
+            <input type="hidden" name="customer_external_source" data-customer-external-source>
+            <input type="hidden" name="customer_external_checked_at" data-customer-external-checked-at>
+
+            <div class="processing-row columns-3">
+                <label>
+                    Procesator
+                    <select name="processor_id" data-processor-select>
+                        <?php foreach ($data['processors'] as $processor): ?>
+                            <option value="<?= h((string) $processor['id']) ?>" <?= (int) $processor['id'] === $defaultProcessorId ? 'selected' : '' ?>>
+                                <?= h($processor['name']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </label>
+                <label>
+                    Pret procesare
+                    <input value="0.00 lei" readonly data-processing-price>
+                </label>
+                <label>
+                    Scazamant %
+                    <input value="0.000" readonly data-processing-shrinkage>
+                </label>
+            </div>
+
+            <div class="processing-row columns-3">
+                <label>
+                    Cantitate ceara kg
+                    <input name="gross_kg" required inputmode="decimal" placeholder="12.500">
+                </label>
+                <label>
+                    Cantitate faguri
+                    <input value="0,000 kg" readonly data-processing-exchange>
+                </label>
+                <label>
+                    Cost procesare
+                    <input value="0.00 lei" readonly data-processing-cost>
+                </label>
+            </div>
+
+            <div class="form-actions">
+                <button class="primary" type="submit">Creeaza lot</button>
+            </div>
         </div>
     </form>
 </section>

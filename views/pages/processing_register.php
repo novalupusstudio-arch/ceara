@@ -38,7 +38,33 @@ foreach ($rows as $row) {
 </section>
 
 <section class="panel">
-    <h2>Registru procesare</h2>
+    <div class="panel-heading-row">
+        <h2>Registru procesare</h2>
+        <form method="get" class="date-filter-form">
+            <input type="hidden" name="page" value="processing_register">
+            <label>
+                Data start
+                <input type="date" name="date_start" value="<?= h($data['date_start']) ?>">
+            </label>
+            <label>
+                Data final
+                <input type="date" name="date_end" value="<?= h($data['date_end']) ?>">
+            </label>
+            <button class="secondary compact" type="submit">Filtreaza</button>
+        </form>
+    </div>
+    <div class="register-balance-summary">
+        <div class="register-balance-row">
+            <strong>Sold final perioada</strong>
+            <span>Ceara in custodie: <?= h(grams_to_kg((int) $data['closing_wax_g'])) ?></span>
+            <span>Faguri in custodie: <?= h(grams_to_kg((int) $data['closing_foundation_g'])) ?></span>
+        </div>
+        <div class="register-balance-row">
+            <strong>Sold inceput perioada</strong>
+            <span>Ceara in custodie: <?= h(grams_to_kg((int) $data['opening_wax_g'])) ?></span>
+            <span>Faguri in custodie: <?= h(grams_to_kg((int) $data['opening_foundation_g'])) ?></span>
+        </div>
+    </div>
     <div class="table-wrap">
         <table>
             <thead>
