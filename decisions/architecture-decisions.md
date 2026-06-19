@@ -135,3 +135,17 @@ Whenever a major architectural or business decision is finalized, update:
 - `AI_HANDOVER.md`
 - this file
 
+
+### 13. Purchase flow uses separate company-owned stock
+
+- Chosen because purchased wax is owned by the company and must not mix with customer custody wax.
+- Purchase entries write positive `wax_purchased` inventory movements.
+- Purchase exits write negative `wax_purchased` inventory movements.
+- Purchase factory/partner exits are not handled by processing `Predare fabrica`; they use the separate `Iesire ceara` page.
+- Purchase documents are external references only for now, not generated PDFs.
+
+Rejected alternatives:
+
+- Reusing `wax_custody` or processing factory delivery for purchased wax.
+- Generating internal borderou/factura/NIR documents for purchase entries before the accounting flow is finalized.
+- Allocating exits to exact purchase lots immediately; current MVP uses stock-level exits.

@@ -1,308 +1,403 @@
-# Project Spec
+﻿# Project Spec
 
-## Purpose
+## Objective
 
-Ceara is a PHP + MySQL web app for managing a wax business with two core flows:
+Build and maintain a local-first PHP/MySQL application for wax operations with two independent operational flows:
 
-1. Processing customer wax into wax foundations.
-2. Purchasing wax and turning it into company-owned inventory.
+1. Processing customer wax held in custody.
+2. Purchasing wax into company-owned inventory.
 
-The core goal is lot traceability, with clear separation between customer custody stock and company-owned stock.
+The application must preserve traceability and never mix custody wax with purchased wax.
 
-## Principles
+## Core Principles
 
-- Full lot traceability.
-- Separate custody stock from company-owned stock.
-- Append-only audit trail for sensitive actions.
-- Multi-store support.
-- Multi-processor support.
-- Mock fiscal/document outputs first, real integrations later.
+- Quantities are stored as integer grams.
+- UI displays kg with three decimals.
+- Operational stock movements are append-only in `inventory_transactions`.
+- Audit-sensitive actions are logged in `audit_log`.
+- Users operate in their assigned store/gestiune.
+- Processing stock and purchase stock are separate.
+- External paper/accounting documents are referenced when the app does not generate documents.
 
-## Users and Roles
+## Roles
 
-### Admin
+Seeded local admin:
 
-The seeded initial admin is `admin / admin`.
+- user: `admin`
+- password: `admin`
 
-Admin can manage:
+Production SQL seed admin:
 
-- users
-- roles and permissions
-- stores
-- processors
-- settings
-- audit access
+- user: `admin`
+- password: `CearaAdmin!2026`
 
-### Operator
+Roles:
 
-Operator can:
+- `admin`
+- `operator`
 
-- create processing lots
-- create purchase lots
-- use the assigned store only
-- work inside the permissions granted by role
+Main permissions:
 
-## Recommended Permissions
+- user management
+- store management
+- processor management
+- document template management
+- processing creation/actions
+- purchase creation/actions
+- reports
+- audit
 
-- `USER_CREATE`
-- `USER_EDIT`
-- `USER_RESET_PASSWORD`
-- `ROLE_PERMISSION_MANAGE`
-- `STORE_MANAGE`
-- `PROCESSOR_MANAGE`
-- `PROCESSING_CREATE`
-- `PROCESSING_ACCEPT`
-- `PROCESSING_REJECT`
-- `PURCHASE_CREATE`
-- `REPORT_VIEW`
-- `AUDIT_VIEW`
+## Dashboard And Navigation
 
-## Settings
+The app starts with no active business flow.
 
-### Company Data
+General sidebar:
 
-- name
-- fiscal code / CUI
-- trade registry number
-- address
+- Dashboard
+- Documente
+- Rapoarte
+- Setari
+- Audit
 
-Current implemented MVP fields:
+Dashboard flow buttons:
 
-- society name
-- CUI
-- trade registry number
-- address
+- `Schimb de ceara`
+- `Achizitie ceara`
 
-These are edited in `Setari > Date societate` by the initial admin and are used
-by document template variables.
+When processing is selected, sidebar adds:
 
-### Stores
+- Procesare ceara
+- Loturi ceara
+- Predare fabrica
+- Buffer fabrica
+- Registru gestiune
 
-- code
-- name
-- address
+When purchase is selected, sidebar adds:
 
-### Processors
+- Achizitie ceara
+- Iesire ceara
+- Registru achizitie
 
-- name
-- CUI
-- address
-- contact
-- processing price
-- exchange shrinkage percentage
+## Processing Flow Specification
 
-### Document Series
+### Create Processing Lot
 
-- Every document has a store / gestiune series.
-- Numbering starts simple for MVP: `1`, `2`, `3`.
-- The exact numbering rules can be refined later.
+Inputs:
 
-## Processing Flow
+- customer type PF/PJ
+- existing customer search or new customer
+- PF: name, phone, CNP/CI, county, locality, address
+- PJ: name, CUI, phone, representative, county, locality, address
+- processor preselected from user's assigned store
+- gross wax kg
+- processing price / shrinkage shown from processor
 
-### Statuses
+Actions:
 
-- `In Validare`
-- `Acceptat`
-- `Predat Fabricii`
-- `Respins`
-- `Returnat`
+- create `processing_lots`
+- create `processing_lot_movements.RECEIVE_WAX_FROM_CLIENT`
+- add `inventory_transactions.wax_custody` positive movement
+- create linked `PV-CUST` document row
 
-### Current Behavior
+### Lot Detail
 
-- New lots start in `In Validare`.
-- The lot board is the main validation screen.
-- `Acceptat` is the end state on the lot board.
-- Predarea la fabrica is handled in batch on a separate page.
+Shows:
 
-### Main Screens
+- current calculated stock/balance values
+- movement journal
+- document buttons per movement
+- exchange wax action
+- return wax action
 
-- Processing lot creation
-- Lot summary with calculated balances
-- Lot detail with movement journal and movement-level documents
-- Batch factory delivery page
-- Factory buffer page
-- Processing store register
+Exchange:
 
-### Current Movement Model
+- cannot exceed wax available for exchange
+- calculates foundations from shrinkage
+- cannot make `foundation_operational` negative
+- writes movement and negative foundation stock
+- can generate FGO invoice, FiscalWire receipt, PV-FAG
 
-Processing lots are containers. Operational state is calculated from append-only
-movements:
+Return:
 
-- `RECEIVE_WAX_FROM_CLIENT`
-- `EXCHANGE_WAX_WITH_CLIENT`
-- `RETURN_WAX_TO_CLIENT`
-- `SEND_WAX_TO_FACTORY`
-- `RECEIVE_FOUNDATION_FROM_FACTORY`
-- `FACTORY_REJECT_WAX`
-- `RECORD_LOSS`
-- `RECOVER_FOUNDATION_FROM_CLIENT`
+- cannot exceed custody wax
+- writes movement and negative custody stock
+- can generate PV-RET
 
-Factory delivery currently records both the wax sent to factory and the
-calculated foundation quantity received from factory, increasing operational
-foundation stock immediately.
+### Factory Delivery
+
+- Dedicated batch page.
+- Uses only processing custody stock.
+- Lists lots with wax still in custody for selected/assigned processor.
+- Operator edits sent quantity and rejected quantity.
+- Sum per lot cannot exceed custody remaining.
+- Sent wax decreases `wax_custody`.
+- Calculated foundations increase `foundation_operational`.
+- Rejected factory wax is recorded as movement.
+
+### Factory Buffer
+
+- Adjusts `foundation_operational` directly by external aviz.
+- Plus increases stock.
+- Minus decreases stock and cannot go negative.
+- Each buffer adjustment creates linked NIR record.
 
 ### Processing Register
 
-The processing register is scoped to the operator's assigned store and is
-calculated from inventory transactions. It shows partner, lot link, document
-link, date, wax custody movement, foundation custody movement, and operator.
+Store-scoped register from `inventory_transactions`.
 
-### Store / Processor Constraint
+Filters:
 
-Each store is assigned to one processor. Multiple processors for one physical
-location should be represented as separate stores.
+- date start
+- date end
 
-## Purchase Flow
+Shows:
 
-### Supplier Types
+- current stock totals
+- opening balance
+- closing balance
+- partner
+- lot link where applicable
+- document link where applicable
+- date
+- signed wax custody quantity
+- signed foundation quantity
+- operator
+
+## Purchase Flow Specification
+
+Purchase is fully separate from processing.
+
+### Purchase Stock
+
+Use inventory movement type:
+
+- `wax_purchased`
+
+Do not use:
+
+- `wax_custody`
+- processing factory delivery
+- processing processor assignment rules
+
+### Create Purchase Lot Page
+
+Page: `purchases` / `Achizitie ceara`.
+
+This page only creates new purchase lots. It does not list lots.
+
+Supplier type radio:
 
 - PF
-- PFA
-- PJ / SRL
+- Producator agricol
+- PJ/PFA
 
-### Current Behavior
+Common supplier fields:
 
-- Purchase flow is intentionally disabled in the current navigation.
-- It will be rebuilt from zero with separate stock rules from processing.
+- name
+- phone
+- county
+- locality
+- address
 
-## Documents
+PF / Producator agricol:
 
-### Processing Documents
+- CNP/CI identifier
+- document series
+- document number
+- document position
 
-- PV custodie
-- Factura serviciu
-- Bon fiscal
-- PV returnare
-- AVIZ procesator
+PJ/PFA:
+
+- CUI
+- invoice series
+- invoice number
+- invoice date
+
+Purchase fields:
+
+- purchase date
+- gross kg
+- shrinkage %
+- price with VAT lei/kg
+- calculated total
+- calculated net kg
+- assigned store display
+
+Save behavior:
+
+- create/update supplier by type + name/identifier or CUI
+- create `purchase_lots`
+- add positive `inventory_transactions.wax_purchased`
+- do not create internal document/PDF records
+
+Validation:
+
+- gross quantity > 0
+- PF/producator identifier required
+- PJ/PFA CUI required
+- document series + number required
+- document position required for PF/producator
+- invoice date required for PJ/PFA
+- external document type + series + number + position unique
+
+### Purchase Exit Page
+
+Page: `purchase_exit` / `Iesire ceara`.
+
+Purpose: record wax leaving purchased stock toward factory/partner/customer by external document.
+
+Fields:
+
+- partner/factory name
+- partner identifier/CUI
+- quantity kg
+- document type
+- document series
+- document number
+- document date
+- notes
+
+Save behavior:
+
+- create `purchase_wax_exits`
+- write negative `inventory_transactions.wax_purchased`
+- cannot exceed current purchased wax stock
+- no PDF generated
+
+Current implementation is stock-level exit only, not allocated to specific purchase lots.
+
+### Purchase Register Page
+
+Page: `purchase_register` / `Registru achizitie`.
+
+Filters:
+
+- date start
+- date end
+
+Shows:
+
+- current purchased wax stock
+- opening period balance
+- closing period balance
+- movement table: partner, document, position, date, signed wax quantity, operator, notes
+- lot list below register
+
+## Location / SIRUTA
+
+`release/siruta.csv` is committed and seeded at startup into:
+
+- `siruta_counties`
+- `siruta_localities`
+
+Forms use county/locality combos. Duplicate locality names within one county include parent context.
+
+PJ/PFA customer lookup for processing can use online ANAF demo endpoint. Purchase PJ/PFA lookup is not implemented yet.
+
+## Documents And Templates
+
+Editable templates live in `document_templates` and are managed in settings.
+
+Versioned template source currently includes:
+
+- `lib/templates/pv-cust.html`
+
+Generated PDFs are stored in ignored runtime folder:
+
+- `storage/documents/<store_code>/`
+
+`PV-CUST` is a compact A4 table template with GDPR notice.
+
+Future templates/documents may need refinement:
+
+- PV-FAG
+- PV-RET
+- AVIZ
 - NIR
 
-### Purchase Documents
+## FGO
 
-- Borderou
-- Factura furnizor
-- NIR materie prima
-- AVIZ procesator
-- NIR produse finite
+FGO invoice generation is used for processing service invoices.
 
-### Fiscal Output
+Config:
 
-- Documents are stored as DB records.
-- Document HTML templates are stored in `document_templates`.
-- `PV-CUST` is generated from its HTML template using Dompdf.
-- Generated PDF files are saved under `storage/documents/<store_code>/`.
-- PDFs open inline in a new browser tab from the document endpoint.
-- Future integrations will replace the mock layer later.
+- `config/config.php` defaults
+- optional ignored `config/fgo.local.php`
+- `company_settings.fgo_private_key` overrides private key if filled
 
-## Inventory Model
+FGO response external invoice link is saved in document row.
 
-### Custody
+## FiscalWire
 
-- customer wax
-- operational wax foundations
+FiscalWire creates `.inp` files for cash register.
 
-### Company-Owned
+Rules:
 
-- purchased wax
-- merchandise wax foundations
+- only `S` and `T` lines
+- VAT 21 uses fiscal code `1`
+- cash payment `0`
+- card payment `1`
+- item name: `Servicii procesare`
+- generated file downloads directly from browser
+- file name: `<LOT_NUMBER>_<YYmmddHHmm>.inp`
 
-Custody stock and company-owned stock must never be mixed.
+## Settings
 
-### Quantity Precision
+`Setari > Date societate`:
 
-- Store quantities in grams.
-- Show quantities in kilograms with three decimals.
-- Keep calculations in integer grams to avoid rounding drift.
+- company name
+- CUI
+- registry number
+- address
+- FGO API key
+- purchase default shrinkage %
+- purchase default price with VAT lei/kg
+- purchase factory shrinkage %
+- purchase factory price with VAT lei/kg
 
-## Dashboard
+Other settings:
 
-### Main Actions
+- roles and permissions
+- users
+- stores
+- processors
+- document templates
 
-- Procesare Ceara
-- Achizitie Ceara
+## Deployment
 
-### KPI
+Local:
 
-- operational wax foundation stock
-- wax in custody
-- lots pending validation
-- accepted lots
-- rejected lots
-- company-owned wax stock
-- merchandise wax foundation stock
+- use `scripts/sync-to-xampp.ps1`
+- `config/xampp-target.local.txt` is local/ignored
 
-## Reports
+Production:
 
-### Processing
+- SQL seed: `deploy/sql/init-production.sql`
+- build script: `scripts/build-production-zip.ps1`
+- production config template: `deploy/production-config.template.php`
+- local production config: `deploy/local/config.php`, ignored
 
-- open lots
-- accepted lots
-- rejected lots
-- wax in custody
+Do not generate production zip unless the user explicitly asks.
 
-### Purchase
+## Open / Next Work
 
-- PF purchases
-- PFA/PJ purchases
-- wax stock
-- wax foundation stock
+High priority:
 
-## Audit
+- Manual test full purchase flow after latest implementation.
+- Manual test purchase exit with over-stock validation.
+- Manual test processing exchange error redirects and real FiscalWire download.
+- Consider app version bump to force JS/CSS cache refresh.
 
-Log every important operation with:
+Medium priority:
 
-- user
-- date
-- operation
-- old value
-- new value
+- Add ANAF lookup to purchase PJ/PFA suppliers.
+- Add purchase register filters for supplier type/document/operator.
+- Decide whether purchase exits should consume specific lots FIFO/manual allocation.
+- Add detail page for purchase lots.
+- Add factory/partner directory for purchase exits.
 
-Audit records are append-only and must not be deleted.
+Production readiness:
 
-## Future Integrations
-
-- eFactura
-- POS
-- SMS
-- Email
-- QR codes
-- Mobile app
-
-## Technical Stack
-
-- Backend: plain PHP
-- Database: MySQL
-- Local runtime: XAMPP
-- Frontend: server-rendered PHP with light JavaScript helpers
-- PDF generation: Dompdf, bundled in committed `vendor/`
-- Source workspace: local Git clone, currently `D:\Novalupusstudio\ceara`
-- XAMPP test copy: configured locally in `config/xampp-target.local.txt`
-
-## Database Direction
-
-Main tables include:
-
-- `users`
-- `roles`
-- `permissions`
-- `stores`
-- `processors`
-- `customers`
-- `suppliers`
-- `processing_lots`
-- `processing_lot_status_events`
-- `factory_batches`
-- `factory_batch_items`
-- `purchase_lots`
-- `documents`
-- `document_templates`
-- `company_settings`
-- `inventory_transactions`
-- `audit_log`
-
-## Open Decisions
-
-- Final lot and document numbering rules.
-- Whether batch history needs dedicated screens.
-- Whether more detailed per-lot delivery auditing is needed.
-- How strict password change enforcement should be for new users.
-- Whether issued PDFs become immutable once printed or remain regenerable during MVP.
+- Build fresh production zip only when requested.
+- Re-test init SQL after any schema change.
+- Configure production DB and initial admin password change.

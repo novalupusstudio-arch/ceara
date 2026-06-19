@@ -1,16 +1,32 @@
-# Dashboard
+﻿# Dashboard
 
-## Main Actions
+## Flow Selection
 
-1. Procesare Ceara
-2. Achizitie Ceara
+Dashboard starts with general navigation and two active flow choices:
+
+1. Schimb de ceara
+2. Achizitie ceara
+
+Selecting a flow changes sidebar entries.
+
+## Processing Sidebar
+
+- Procesare ceara
+- Loturi ceara
+- Predare fabrica
+- Buffer fabrica
+- Registru gestiune
+
+## Purchase Sidebar
+
+- Achizitie ceara
+- Iesire ceara
+- Registru achizitie
 
 ## KPI
 
-- operational wax foundation stock
-- wax in custody
-- lots in validation
-- accepted lots
-- rejected lots
-- company-owned wax stock
-- merchandise wax foundation stock
+Top dashboard KPI currently focuses on:
+
+- Stoc faguri operational
+- Ceara in custodie
+- Ceara proprie / company-owned wax, including purchased wax stock
