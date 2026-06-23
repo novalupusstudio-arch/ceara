@@ -71,7 +71,7 @@ Current extracted modules:
 
 - `lib/Integrations/` - FGO and FiscalWire
 - `lib/Documents/` - document issuing, files, PDF/template rendering and variable building
-- `lib/Inventory/` - inventory transaction writer
+- `lib/Inventory/` - inventory transaction writer, balances and register rows
 
 `lib/App.php` is still the main facade and is being reduced gradually through small, behavior-preserving commits.
 

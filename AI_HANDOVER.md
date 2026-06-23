@@ -59,7 +59,7 @@ Current new modular folders under `lib/`:
 
 - `lib/Integrations/` - external integrations (`FgoClient`, `FiscalWireExporter`)
 - `lib/Documents/` - document flow helpers (`DocumentFiles`, `DocumentIssuer`, `DocumentGenerator`, `DocumentVariablesBuilder`, `PdfRenderer`, `TemplateRenderer`)
-- `lib/Inventory/` - stock ledger helpers (`InventoryWriter`)
+- `lib/Inventory/` - stock ledger helpers (`InventoryService`, `InventoryWriter`)
 
 `lib/autoload.php` autoloads namespaced classes with the `Ceara\` prefix. Legacy global classes still exist for the main app shell (`App`, `Database`, `Auth`) while functionality is moved in small commits.
 
@@ -255,7 +255,7 @@ For an already initialized production database, do not run the full reset script
 
 Refactoring:
 
-- Next low-risk target: move FiscalWire receipt storage/path handling out of `App.php` or expand `InventoryService` with stock balance queries.
+- Next low-risk target: move FiscalWire receipt storage/path handling out of `App.php`.
 - Next medium-risk target: split POST actions from `index.php` into small action handlers/controllers.
 - Larger target after that: split processing and purchase business logic into separate services/repositories.
 

@@ -28,7 +28,7 @@ Current module folders:
 
 - `Ceara\Integrations` for external systems.
 - `Ceara\Documents` for document issuing, generated files, PDF/template rendering and variable building.
-- `Ceara\Inventory` for inventory ledger helpers.
+- `Ceara\Inventory` for inventory ledger writing, balances and register row queries.
 
 Temporary legacy facade:
 
