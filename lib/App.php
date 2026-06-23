@@ -463,8 +463,14 @@ final class App
         return new \Ceara\PurchaseService(
             $this->pdo,
             $this->inventoryService(),
+            $this->supplierService(),
             fn (int $documentId) => $this->renderDocumentFile($documentId)
         );
+    }
+
+    private function supplierService(): \Ceara\SupplierService
+    {
+        return new \Ceara\SupplierService($this->pdo);
     }
 
     private function settingsService(): \Ceara\SettingsService
