@@ -63,6 +63,18 @@ Ignored optional local files:
 
 Do not commit local secrets.
 
+## Code Structure
+
+The app is plain PHP, but new code should use the `Ceara\` namespaced autoload from `lib/autoload.php`.
+
+Current extracted modules:
+
+- `lib/Integrations/` - FGO and FiscalWire
+- `lib/Documents/` - PDF and document template rendering
+- `lib/Inventory/` - inventory transaction writer
+
+`lib/App.php` is still the main facade and is being reduced gradually through small, behavior-preserving commits.
+
 ## Important Committed Runtime Support
 
 - `vendor/` - Dompdf and PHP dependencies

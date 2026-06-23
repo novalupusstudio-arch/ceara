@@ -25,6 +25,19 @@ Purchased wax must not be mixed with custody wax, neither in stock nor in factor
 - CSS in `assets/styles.css`
 - Dompdf bundled in committed `vendor/`
 - SIRUTA source CSV committed in `release/siruta.csv`
+- Lightweight `Ceara\` autoload for new namespaced classes under `lib/`
+
+## Refactoring Direction
+
+The application is being split incrementally to reduce large-file edits and context load.
+
+Current modular folders:
+
+- `lib/Integrations/`: FGO and FiscalWire integration clients.
+- `lib/Documents/`: PDF and template rendering helpers.
+- `lib/Inventory/`: inventory ledger writer.
+
+Existing `App.php` remains the temporary facade while behavior is moved out in small, tested commits. Avoid big-bang rewrites; keep schema/business behavior stable unless the user explicitly asks for a behavior change.
 
 ## Repo / Runtime Paths
 

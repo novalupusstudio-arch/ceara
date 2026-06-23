@@ -18,6 +18,22 @@ The application must preserve traceability and never mix custody wax with purcha
 - Users operate in their assigned store/gestiune.
 - Processing stock and purchase stock are separate.
 - External paper/accounting documents are referenced when the app does not generate documents.
+- Refactoring should keep business behavior unchanged and move code out of large files in small committed steps.
+
+## Code Organization Direction
+
+New PHP classes should use the `Ceara\` namespace and live under `lib/`, loaded by `lib/autoload.php`.
+
+Current module folders:
+
+- `Ceara\Integrations` for external systems.
+- `Ceara\Documents` for document rendering.
+- `Ceara\Inventory` for inventory ledger helpers.
+
+Temporary legacy facade:
+
+- `App.php` still coordinates many flows while services are extracted.
+- `index.php` still owns routing and POST action dispatch until controller/action handlers are introduced.
 
 ## Roles
 

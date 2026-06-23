@@ -51,6 +51,20 @@ Important committed support files:
 - `scripts/sync-to-xampp.ps1` for local deploy copy
 - `scripts/build-production-zip.ps1` for production zip when requested
 
+## Current Code Structure Direction
+
+The project is being refactored incrementally away from one large `App.php`.
+
+Current new modular folders under `lib/`:
+
+- `lib/Integrations/` - external integrations (`FgoClient`, `FiscalWireExporter`)
+- `lib/Documents/` - document rendering helpers (`PdfRenderer`, `TemplateRenderer`)
+- `lib/Inventory/` - stock ledger helpers (`InventoryWriter`)
+
+`lib/autoload.php` autoloads namespaced classes with the `Ceara\` prefix. Legacy global classes still exist for the main app shell (`App`, `Database`, `Auth`) while functionality is moved in small commits.
+
+Refactoring rule: keep behavior unchanged, lint after each extraction, and commit each safe step before moving deeper business logic.
+
 ## Current Flows
 
 The dashboard has two active business flows. Sidebar changes based on selected flow.
@@ -238,6 +252,12 @@ For an already initialized production database, do not run the full reset script
 - `deploy/sql/20260623-add-store-commercial-terms.sql`
 
 ## Known Current Gaps / Recommended Next Work
+
+Refactoring:
+
+- Next low-risk target: move document storage/path generation and document variable building out of `App.php`.
+- Next medium-risk target: split POST actions from `index.php` into small action handlers/controllers.
+- Larger target after that: split processing and purchase business logic into separate services/repositories.
 
 Processing:
 
