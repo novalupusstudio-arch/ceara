@@ -143,6 +143,11 @@ final class DocumentVariablesBuilder
                 $variables['processor_name'] = (string) ($batch['processor_name'] ?? '');
                 $variables['processor_identifier'] = (string) ($batch['processor_cui'] ?? '');
                 $variables['processor_address'] = (string) ($batch['processor_address'] ?? '');
+                $variables['aviz_number'] = (string) ($batch['aviz_number'] ?? '');
+                $variables['aviz_date'] = !empty($batch['aviz_date']) ? date('Y-m-d', strtotime((string) $batch['aviz_date'])) : '';
+                $variables['foundation_qty_kg'] = grams_to_kg((int) $batch['foundation_g']);
+                $variables['foundation_qty_g'] = (string) ((int) $batch['foundation_g']);
+                $variables['item_qty'] = grams_to_kg((int) $batch['foundation_g']);
                 $variables['factory_items_rows'] = $this->factoryBatchItemsRows($factoryBatchId);
             }
         }

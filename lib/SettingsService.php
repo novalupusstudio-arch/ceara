@@ -102,9 +102,10 @@ final class SettingsService
 
     public function createUser(array $data, int $userId): void
     {
-        $username = trim($data['username']);
+        $username = trim((string) ($data['username'] ?? ''));
         $password = (string) $data['password'];
-        $role = in_array($data['role'], self::roles(), true) ? $data['role'] : 'operator';
+        $role = in_array(($data['role'] ?? ''), self::roles(), true) ? $data['role'] : 'operator';
+        $storeId = $this->normalizeUserStoreId($data['store_id'] ?? 0);
 
         if ($username === '' || $password === '') {
             throw new RuntimeException('Utilizatorul si parola sunt obligatorii.');
@@ -118,18 +119,60 @@ final class SettingsService
             $stmt->execute([
                 $username,
                 password_hash($password, PASSWORD_DEFAULT),
-                trim($data['full_name']) ?: $username,
+                trim((string) ($data['full_name'] ?? '')) ?: $username,
                 $role,
                 isset($data['active']) ? 1 : 0,
             ]);
             $newUserId = (int) $this->pdo->lastInsertId();
 
-            foreach (($data['store_ids'] ?? []) as $storeId) {
-                $this->pdo->prepare('INSERT IGNORE INTO user_stores (user_id, store_id) VALUES (?, ?)')
-                    ->execute([$newUserId, (int) $storeId]);
-            }
+            $this->syncUserStore($newUserId, $storeId);
 
             ($this->logAudit)($userId, 'USER_CREATE', 'users', $newUserId, null, $username);
+            $this->pdo->commit();
+        } catch (Throwable $error) {
+            $this->pdo->rollBack();
+            throw $error;
+        }
+    }
+
+    public function updateUser(array $data, int $userId): void
+    {
+        $targetUserId = (int) ($data['id'] ?? 0);
+        $existing = $this->findUser($targetUserId);
+        if (!$existing) {
+            throw new RuntimeException('Utilizatorul selectat nu exista.');
+        }
+
+        $role = in_array(($data['role'] ?? ''), self::roles(), true) ? $data['role'] : 'operator';
+        $fullName = trim((string) ($data['full_name'] ?? ''));
+        $password = (string) ($data['password'] ?? '');
+        $storeId = $this->normalizeUserStoreId($data['store_id'] ?? 0);
+        $active = isset($data['active']) ? 1 : 0;
+
+        $this->pdo->beginTransaction();
+        try {
+            $params = [
+                $fullName !== '' ? $fullName : (string) $existing['username'],
+                $role,
+                $active,
+            ];
+            $sql = 'UPDATE users SET full_name = ?, role = ?, active = ?';
+
+            if ($password !== '') {
+                if (strlen($password) < 4) {
+                    throw new RuntimeException('Parola noua trebuie sa aiba minimum 4 caractere.');
+                }
+                $sql .= ', password_hash = ?';
+                $params[] = password_hash($password, PASSWORD_DEFAULT);
+            }
+
+            $sql .= ' WHERE id = ?';
+            $params[] = $targetUserId;
+
+            $this->pdo->prepare($sql)->execute($params);
+            $this->syncUserStore($targetUserId, $storeId);
+
+            ($this->logAudit)($userId, 'USER_UPDATE', 'users', $targetUserId, (string) $existing['username'], (string) $existing['username']);
             $this->pdo->commit();
         } catch (Throwable $error) {
             $this->pdo->rollBack();
@@ -415,6 +458,35 @@ final class SettingsService
     private function internalDocumentSeriesTypes(): array
     {
         return ['PV-CUST', 'PV-FAG', 'PV-RET', 'AVIZ', 'NIR', 'BON', 'BORD'];
+    }
+
+    private function normalizeUserStoreId(mixed $rawStoreId): int
+    {
+        $storeId = (int) $rawStoreId;
+        if ($storeId > 0 && !($this->find)('stores', $storeId)) {
+            throw new RuntimeException('Gestiunea selectata nu exista.');
+        }
+
+        return max(0, $storeId);
+    }
+
+    private function syncUserStore(int $targetUserId, int $storeId): void
+    {
+        $this->pdo->prepare('DELETE FROM user_stores WHERE user_id = ?')->execute([$targetUserId]);
+
+        if ($storeId > 0) {
+            $this->pdo->prepare('INSERT INTO user_stores (user_id, store_id) VALUES (?, ?)')
+                ->execute([$targetUserId, $storeId]);
+        }
+    }
+
+    private function findUser(int $userId): ?array
+    {
+        $stmt = $this->pdo->prepare('SELECT * FROM users WHERE id = ? LIMIT 1');
+        $stmt->execute([$userId]);
+        $row = $stmt->fetch();
+
+        return $row ?: null;
     }
 
     private function findDocumentSeries(int $id): ?array

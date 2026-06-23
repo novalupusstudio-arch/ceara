@@ -33,6 +33,17 @@ $shrinkagePct = $selectedProcessor ? (float) $selectedProcessor['exchange_shrink
         <input type="hidden" name="action" value="create_factory_batch">
         <input type="hidden" name="processor_id" value="<?= h((string) $selectedProcessorId) ?>">
 
+        <div class="processing-row columns-3">
+            <label>
+                Numar aviz
+                <input name="aviz_number" required placeholder="AVZ-001">
+            </label>
+            <label>
+                Data aviz
+                <input type="date" name="aviz_date" required value="<?= h(date('Y-m-d')) ?>">
+            </label>
+        </div>
+
         <div class="factory-totals">
             <label>
                 Total ceara de predat

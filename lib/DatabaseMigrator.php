@@ -123,6 +123,8 @@ final class DatabaseMigrator
                     batch_number VARCHAR(40) NOT NULL UNIQUE,
                     processor_id INT NOT NULL,
                     store_id INT NOT NULL,
+                    aviz_number VARCHAR(80) NOT NULL DEFAULT '',
+                    aviz_date DATE NULL,
                     wax_g INT NOT NULL,
                     foundation_g INT NOT NULL,
                     processing_cost_cents INT NOT NULL DEFAULT 0,
@@ -133,6 +135,13 @@ final class DatabaseMigrator
                     FOREIGN KEY (created_by) REFERENCES users(id)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
             );
+        } else {
+            if (!$this->pdo->query("SHOW COLUMNS FROM factory_batches LIKE 'aviz_number'")->fetch()) {
+                $this->pdo->exec("ALTER TABLE factory_batches ADD aviz_number VARCHAR(80) NOT NULL DEFAULT '' AFTER store_id");
+            }
+            if (!$this->pdo->query("SHOW COLUMNS FROM factory_batches LIKE 'aviz_date'")->fetch()) {
+                $this->pdo->exec("ALTER TABLE factory_batches ADD aviz_date DATE NULL AFTER aviz_number");
+            }
         }
 
         $table = $this->pdo->query("SHOW TABLES LIKE 'factory_batch_items'")->fetchColumn();

@@ -85,6 +85,8 @@ foreach ($rows as $row) {
                         <td>
                             <?php if (!empty($row['lot_url']) && !empty($row['lot_number'])): ?>
                                 <a class="table-link" href="<?= h($row['lot_url']) ?>"><?= h($row['lot_number']) ?></a>
+                            <?php elseif (!empty($row['lot_number'])): ?>
+                                <strong><?= h($row['lot_number']) ?></strong>
                             <?php else: ?>
                                 <span class="muted">-</span>
                             <?php endif; ?>

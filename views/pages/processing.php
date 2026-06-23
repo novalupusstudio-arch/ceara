@@ -22,7 +22,7 @@ $defaultShrinkagePct = (float) ($assignedStore['processing_shrinkage_pct'] ?? 0)
 
 <section class="panel">
     <h2>Lot nou</h2>
-    <form method="post" class="processing-form" data-processing-form>
+    <form method="post" class="processing-form" data-processing-form autocomplete="off">
         <input type="hidden" name="action" value="create_processing">
         <input type="hidden" name="existing_customer_id" value="0" data-existing-customer-id>
         <input type="hidden" name="force_new_customer" value="0" data-force-new-customer>
@@ -54,34 +54,34 @@ $defaultShrinkagePct = (float) ($assignedStore['processing_shrinkage_pct'] ?? 0)
             <div class="processing-row columns-3" data-pf-row>
                 <label data-name-field>
                     <span data-name-label>Nume client</span>
-                    <input name="customer_name" required placeholder="Nume client PF" data-customer-name>
+                    <input name="customer_name" required placeholder="Nume client PF" data-customer-name autocomplete="off">
                 </label>
                 <label data-phone-field>
                     <span data-phone-label>Telefon</span>
-                    <input name="customer_phone" required placeholder="07xxxxxxxx" data-customer-phone>
+                    <input name="customer_phone" required placeholder="07xxxxxxxx" data-customer-phone autocomplete="off">
                 </label>
                 <label data-identifier-field>
                     CNP/CI
-                    <input name="customer_identifier" placeholder="CJ123456" data-customer-identifier>
+                    <input name="customer_identifier" placeholder="CJ123456" data-customer-identifier autocomplete="off">
                 </label>
             </div>
 
             <div class="processing-row columns-4 is-hidden" data-pj-row hidden>
                 <label>
                     Nume PJ
-                    <input name="customer_name_pj" placeholder="Denumire companie" data-customer-name-pj>
+                    <input name="customer_name_pj" placeholder="Denumire companie" data-customer-name-pj autocomplete="off">
                 </label>
                 <label>
                     CUI
-                    <input name="customer_cui" placeholder="RO123456" data-customer-cui>
+                    <input name="customer_cui" placeholder="RO123456" data-customer-cui autocomplete="off">
                 </label>
                 <label>
                     Telefon PJ
-                    <input name="customer_phone_pj" placeholder="07xxxxxxxx" data-customer-phone-pj>
+                    <input name="customer_phone_pj" placeholder="07xxxxxxxx" data-customer-phone-pj autocomplete="off">
                 </label>
                 <label>
                     Reprezentant
-                    <input name="customer_representative" placeholder="Nume reprezentant" data-customer-representative>
+                    <input name="customer_representative" placeholder="Nume reprezentant" data-customer-representative autocomplete="off">
                 </label>
             </div>
 
@@ -100,11 +100,11 @@ $defaultShrinkagePct = (float) ($assignedStore['processing_shrinkage_pct'] ?? 0)
                 </label>
                 <label data-pf-address-field>
                     Adresa
-                    <input name="customer_address" required placeholder="Adresa client" data-customer-address>
+                    <input name="customer_address" required placeholder="Adresa client" data-customer-address autocomplete="off">
                 </label>
                 <label class="is-hidden" data-pj-address-field hidden>
                     Adresa preluata
-                    <input name="customer_address_pj" placeholder="Strada, numar" data-customer-address-pj>
+                    <input name="customer_address_pj" placeholder="Strada, numar" data-customer-address-pj autocomplete="off">
                 </label>
             </div>
 

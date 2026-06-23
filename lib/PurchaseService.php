@@ -260,6 +260,15 @@ final class PurchaseService
         return compact('type', 'series', 'number', 'position', 'date');
     }
 
+    private function normalizeSupplierType(string $supplierType): string
+    {
+        return match ($supplierType) {
+            'Producator agricol' => 'Producator agricol',
+            'PJ/PFA', 'PFA/SRL' => 'PJ/PFA',
+            default => 'PF',
+        };
+    }
+
     private function assertUniquePurchaseDocument(array $document): void
     {
         $stmt = $this->pdo->prepare(

@@ -112,6 +112,8 @@ final class PostActionDispatcher
         if ($action === 'create_factory_batch') {
             $app->createFactoryBatch([
                 'processor_id' => \post_int('processor_id'),
+                'aviz_number' => \post_string('aviz_number'),
+                'aviz_date' => \post_string('aviz_date'),
                 'lot_qty' => $_POST['lot_qty'] ?? [],
                 'reject_qty' => $_POST['reject_qty'] ?? [],
             ], $user['id']);
@@ -219,9 +221,25 @@ final class PostActionDispatcher
                 'password' => \post_string('password'),
                 'role' => \post_string('role'),
                 'active' => isset($_POST['active']),
-                'store_ids' => $_POST['store_ids'] ?? [],
+                'store_id' => \post_int('store_id'),
             ], $user['id']);
             \flash('Utilizatorul a fost creat.');
+            \redirect('settings', ['settings_tab' => 'users']);
+        }
+
+        if ($action === 'update_user') {
+            if (!\is_initial_admin()) {
+                throw new RuntimeException('Doar adminul initial poate edita utilizatori.');
+            }
+            $app->updateUser([
+                'id' => \post_int('user_id'),
+                'full_name' => \post_string('full_name'),
+                'password' => \post_string('password'),
+                'role' => \post_string('role'),
+                'active' => isset($_POST['active']),
+                'store_id' => \post_int('store_id'),
+            ], $user['id']);
+            \flash('Utilizatorul a fost actualizat.');
             \redirect('settings', ['settings_tab' => 'users']);
         }
 

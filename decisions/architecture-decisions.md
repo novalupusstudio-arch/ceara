@@ -1,151 +1,280 @@
 # Architecture Decisions
 
-## Finalized Decisions
+## Finalized Business And Technical Decisions
 
 ### 1. Plain PHP + MySQL on XAMPP
 
-- Chosen because the app needs to stay simple, local-first, and easy to move between Windows machines.
-- This fits the current workflow of editing in `E:\NovaLupus\ceara` and syncing into XAMPP.
+Chosen because the app is local-first, Windows-friendly, easy to copy between PCs, and the current workflow is heavily operational rather than framework-driven.
+
+Why this was chosen:
+
+- simplest fit for XAMPP
+- easy local deploy into `htdocs`
+- low ceremony for a form/table-heavy internal app
 
 Rejected alternatives:
 
-- Laravel or another framework, because it would add structure that is not needed for the current MVP.
-- A SPA-first frontend, because the app is dominated by form-based business flows and server-rendered tables.
+- Laravel or another full framework
+- SPA-first frontend
 
-### 2. Seeded initial admin account
+### 2. Production-style seeded admin account
 
-- Chosen because the project needs an immediate bootstrap path for permissions and user setup.
-- The initial admin is `admin / admin`.
+Chosen because the app needs an immediate bootstrap path for settings, permissions, and user creation after a clean reset.
 
-Rejected alternatives:
+Finalized behavior:
 
-- Requiring manual database user setup before the app can be used.
-- A separate invite-only onboarding flow, which would slow down first deployment.
-
-### 3. Role-based access with admin and operator
-
-- Chosen because the business rules need a small permission model that can be expanded later.
-- Admin controls users, permissions, stores, processors, and reporting.
-- Operator works inside assigned operational limits.
+- reset SQL seeds one initial admin user
+- current seeded login from `deploy/sql/init-production.sql` is `admin / CearaAdmin!2026`
+- source config does not silently invent a local admin unless seeding is explicitly enabled
 
 Rejected alternatives:
 
-- One global permission list without roles, which would become harder to manage.
-- A much more granular enterprise RBAC model, which would be overkill for the current scope.
+- `admin / admin`
+- requiring manual SQL user creation before first login
+- maintaining a different local bootstrap path than production
 
-### 4. Store assignment is tied to the user
+### 3. Small role model: `admin` and `operator`
 
-- Chosen because operational work must stay scoped to a specific gestiune.
-- This keeps processing and stock movement predictable.
+Chosen because the business currently needs simple operational control, not enterprise RBAC complexity.
 
-Rejected alternatives:
+Finalized behavior:
 
-- Letting users pick any store at runtime, which would weaken traceability.
-- A shared pool of stores for all users, which would blur responsibility.
-
-### 5. Quantities stored in grams, displayed in kilograms
-
-- Chosen because stock math is cleaner and safer in integer grams.
-- The UI still presents readable values such as `1.234 kg`.
+- `admin` manages users, permissions, stores, processors, templates, reports, audit
+- `operator` works inside operational flow with limited rights
+- role permissions are editable from settings by admin-capable users
 
 Rejected alternatives:
 
-- Storing kilograms as decimals, which would create rounding risk.
-- Mixing presentation units with storage units, which would complicate inventory math.
+- no role model, only ad hoc user flags
+- large granular RBAC from day one
 
-### 6. DB document records plus generated PDFs
+### 4. One user works on one gestiune
 
-- Chosen because document numbering and third-party integrations are still being defined, but PDF output is already needed for local testing.
-- Document rows remain in DB as the durable reference.
-- `PV-CUST` is generated from an editable HTML template through Dompdf.
-- Generated files are saved under `storage/documents/<store_code>/` and opened inline from the document endpoint.
-- Other document types may still be placeholder records until their templates are defined.
+Chosen because processing and stock actions must remain tied to one operational context per user.
 
-Rejected alternatives:
+Finalized behavior:
 
-- Integrating real third-party document services immediately.
-- Deferring all document rendering until production readiness.
-- Relying on Composer at install time. `vendor/` is intentionally committed so PC2/server deployments are self-contained.
+- one user has one active gestiune
+- one gestiune may have many users
+- the app should always use the assigned user gestiune in operational pages
 
-### 7. Processing and factory delivery are separate flows
+Why:
 
-- Chosen because the user flow is clearer when lot creation, validation, and batch delivery are separated.
-- The lot board stays focused on lot status, while the factory page handles batching.
+- predictable stock ownership
+- less room for operator mistakes
+- simpler register and audit interpretation
 
 Rejected alternatives:
 
-- Sending lots to factory directly from the lot board.
-- Merging processing creation and factory batch preparation into one large screen.
+- letting users choose any gestiune at runtime
+- mixing multiple active gestiuni per operator workflow
 
-### 8. Processing lots start in validation
+### 5. Quantities stored in grams, presented in kilograms
 
-- Chosen because the flow needs a controlled first state before acceptance.
-- This matches the current operational rule set.
+Chosen because inventory math is safer in integer grams while UI remains readable in kg.
 
-Rejected alternatives:
+Finalized behavior:
 
-- Starting lots directly as accepted.
-- Letting users skip validation.
-
-### 9. `Acceptat` is terminal on the lot board
-
-- Chosen because the next operational step is handled in batch on `Predare fabrica`.
-- This keeps the lot board from doing too much.
+- DB calculations use grams
+- UI shows values like `1.234 kg`
 
 Rejected alternatives:
 
-- Allowing a direct `Predat Fabricii` action from the lot board.
-- Keeping all status transitions on one screen.
+- storing decimal kilograms
+- mixed units in persistence and display
 
-### 10. Batch delivery creates factory batch records
+### 6. Separate stock buckets for separate ownership models
 
-- Chosen because multiple lots can be sent together to one processor.
-- The batch model supports partial quantities and later history review.
+Chosen because customer custody wax and company-owned wax are fundamentally different assets.
 
-Rejected alternatives:
+Finalized stock buckets:
 
-- Updating lots independently without a batch header.
-- Treating each lot shipment as a separate unrelated transaction.
-
-### 11. App state is tracked with status events plus batch data
-
-- Chosen because sensitive business actions need traceability.
-- The status-event approach supports later audit and reporting features.
+- `wax_custody`
+- `foundation_operational`
+- `wax_purchased`
 
 Rejected alternatives:
 
-- Storing only the current lot status with no history.
-- Keeping batch actions only in UI state without persistence.
+- mixing customer and company wax in one stock bucket
+- reusing processing delivery flow for purchased wax exits
 
-### 12. Local sync to XAMPP is the development deployment path
+### 7. Movement-based processing logic is the real operational source of truth
 
-- Chosen because it supports working on one machine and continuing on another with the same folder structure.
-- The app can be copied into `E:\XAMP\htdocs\ceara` for immediate local use.
+Chosen because lot balances evolve through partial exchanges, returns, factory deliveries, rejections, and possible recovery/loss steps.
+
+Finalized behavior:
+
+- balances are derived from `processing_lot_movements`
+- summary logic belongs in services, not views
+- persisted legacy lot status fields remain for compatibility/history, but operational UI increasingly depends on movement-derived calculations
 
 Rejected alternatives:
 
-- Running only from the source folder without a deploy step.
-- Introducing a more complex deployment pipeline before the app stabilizes.
+- manually keeping many balance columns updated on the lot row
+- putting summary math in PHP templates
+
+### 8. Processing lot values snapshot at creation
+
+Chosen because later processor/store setting edits must not rewrite historical lot economics.
+
+Finalized behavior:
+
+- lot stores its own `processing_price_cents`
+- lot stores its own `shrinkage_pct`
+- later exchange and service calculations use lot snapshots
+
+Rejected alternatives:
+
+- reading live processor values for old lots
+- reading live store defaults for historical lots
+
+### 9. `Acceptat` is terminal on the lot board; factory delivery is separate
+
+Chosen because day-to-day lot handling and batch delivery are different operator tasks.
+
+Finalized behavior:
+
+- lot board is for lot monitoring and client-facing actions
+- factory shipment happens from `Predare fabrica`
+- multiple lots can be grouped into one factory batch
+
+Rejected alternatives:
+
+- shipping directly from lot board
+- a single giant page for all processing actions
+
+### 10. Factory delivery is processor-scoped batch work
+
+Chosen because multiple lots are sent together to one processor and need common documents/totals.
+
+Finalized behavior:
+
+- user selects processor on `Predare fabrica`
+- only lots for that processor appear
+- each lot can have deliverable and rejected quantity inputs
+- factory batch stores totals and item rows
+
+Rejected alternatives:
+
+- no batch header, only isolated lot updates
+- mixing lots from multiple processors in one shipment
+
+### 11. Factory delivery requires aviz metadata and generates both `AVIZ` and `NIR`
+
+Chosen because shipment toward factory must have an operator-entered aviz reference, and reception into operational foundation stock needs a linked reception document.
+
+Finalized behavior:
+
+- `factory_batches` stores `aviz_number`
+- `factory_batches` stores `aviz_date`
+- batch creation auto-issues `AVIZ`
+- batch creation auto-issues `NIR`
+- processing register should link to those real documents
+
+Rejected alternatives:
+
+- auto-inventing aviz numbers without operator input
+- issuing only one of the two documents
+- leaving register rows as plain text without document links
+
+### 12. Exchange from buffer does not remove custody wax
+
+Chosen because physically the raw wax remains in custody until it either goes to factory or is returned to the client.
+
+Finalized behavior:
+
+- exchanging foundations to the client records `EXCHANGE_WAX_WITH_CLIENT`
+- custody wax remains until `SEND_WAX_TO_FACTORY`, `RETURN_WAX_TO_CLIENT`, or loss
+- lot can still have wax in custody after partial client exchange
+
+Rejected alternatives:
+
+- decrementing custody immediately on client exchange
+- treating client exchange as equivalent to factory shipment
+
+### 13. Factory rejection creates a warning, but does not fully block further commercial exchange
+
+Chosen because the business may still choose to exchange on loss or return wax depending on the dispute/result.
+
+Finalized behavior:
+
+- rejected-wax lots are visually highlighted in lot detail
+- exchangeable wax is not reduced just because factory rejected some previously sent wax
+- open rejected wax remains relevant for closure/recovery logic
+
+Rejected alternatives:
+
+- blocking all future exchange after any rejection
+- ignoring rejection completely in lot state
+
+### 14. Rejected wax is considered resolved if it was returned to the client or recorded as loss
+
+Chosen because otherwise lots can stay falsely open even after the rejected quantity has been operationally closed.
+
+Finalized behavior:
+
+- open rejected wax = rejected - returned - loss
+- lot closure uses that balance, not raw rejected quantity
+
+Rejected alternatives:
+
+- keeping rejected wax open forever until a separate manual close
+- subtracting only loss and ignoring customer return
+
+### 15. ANAF lookup is a helper, not the final authority
+
+Chosen because external data is useful for prefill but the operator must control the final saved values.
+
+Finalized behavior:
+
+- PJ lookup may prefill company data
+- county/locality matching is best-effort through SIRUTA normalization
+- final saved values are the fields present at submit time
+
+Rejected alternatives:
+
+- forcing ANAF data as immutable truth
+- requiring exact external locality mapping before save
+
+### 16. Critical configuration should fail loudly, not silently fall back
+
+Chosen because silent fallback hides broken setup and creates wrong documents or stock behavior.
+
+Finalized no-fallback areas:
+
+- DB connection
+- assigned store processor where required
+- processing price/shrinkage in backend write path
+- internal document series
+- store FGO series
+- FGO URL/token/CUI
+
+Rejected alternatives:
+
+- auto-using first processor/store
+- placeholder document numbering
+- silently filling missing business values from unrelated config
+
+### 17. `App.php` stays thin; services carry business logic
+
+Chosen because the codebase is already being split and long-term maintenance depends on keeping calculations and writes in focused services.
+
+Finalized direction:
+
+- `App.php` is a facade/orchestrator
+- `ProcessingService` handles read/calculation logic
+- `ProcessingWriteService` handles write/business actions
+- views render prepared data only
+
+Rejected alternatives:
+
+- moving new calculations into views
+- re-growing `App.php` into a monolith
 
 ## Maintenance Rule
 
-Whenever a major architectural or business decision is finalized, update:
+After every meaningful architectural or business-rule change, update:
 
 - `PROJECT_CONTEXT.md`
 - `AI_HANDOVER.md`
-- this file
-
-
-### 13. Purchase flow uses separate company-owned stock
-
-- Chosen because purchased wax is owned by the company and must not mix with customer custody wax.
-- Purchase entries write positive `wax_purchased` inventory movements.
-- Purchase exits write negative `wax_purchased` inventory movements.
-- Purchase factory/partner exits are not handled by processing `Predare fabrica`; they use the separate `Iesire ceara` page.
-- Purchase documents are external references only for now, not generated PDFs.
-
-Rejected alternatives:
-
-- Reusing `wax_custody` or processing factory delivery for purchased wax.
-- Generating internal borderou/factura/NIR documents for purchase entries before the accounting flow is finalized.
-- Allocating exits to exact purchase lots immediately; current MVP uses stock-level exits.
+- `decisions/architecture-decisions.md`

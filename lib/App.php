@@ -227,6 +227,11 @@ final class App
         $this->settingsService()->createUser($data, $userId);
     }
 
+    public function updateUser(array $data, int $userId): void
+    {
+        $this->settingsService()->updateUser($data, $userId);
+    }
+
     public function saveStore(array $data, int $userId): void
     {
         $this->settingsService()->saveStore($data, $userId);
@@ -312,6 +317,28 @@ final class App
             fn (array $doc, array $store) => $this->documentVariables($doc, $store),
             fn (array $doc) => $this->formatDocumentLabel($doc)
         );
+    }
+
+    private function documentVariables(array $document, array $store): array
+    {
+        return (new \Ceara\Documents\DocumentVariablesBuilder(
+            $this->pdo,
+            $this->companySettings()
+        ))->build($document, $store, $this->formatDocumentLabel($document));
+    }
+
+    private function formatDocumentLabel(array $document): string
+    {
+        $series = trim((string) ($document['series'] ?? ''));
+        $number = trim((string) ($document['number'] ?? ''));
+        $type = trim((string) ($document['document_type'] ?? ''));
+        $label = trim($series . '-' . $number, '-');
+
+        if ($label === '') {
+            $label = $type !== '' ? $type : 'Document';
+        }
+
+        return $label;
     }
 
     private function safePathPart(string $value): string

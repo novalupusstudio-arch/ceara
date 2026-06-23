@@ -83,6 +83,39 @@ Generated PDFs are saved under:
 
 - `storage/documents/<store_code>/`
 
+## Recommended First-Run Order
+
+1. `Date societate`
+2. `Procesatori`
+3. `Gestiuni`
+4. `Serii documente`
+5. `Roluri si drepturi`
+6. `Creare useri`
+7. `Template documente`
+8. `Schimba parola`
+
+## Users And Permissions
+
+Current settings tabs should support:
+
+- own password change
+- role permission matrix
+- user creation
+- user editing
+- gestiuni management
+
+Business rule:
+
+- one user works on one gestiune
+- one gestiune may have many users
+
+Permissions that are especially admin-only in current flow:
+
+- user creation/edit/reset
+- store management
+- processor management
+- role/permission management
+
 ## No-Fallback Direction
 
 Critical configuration should not silently invent values.

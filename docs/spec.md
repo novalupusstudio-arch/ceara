@@ -2,47 +2,38 @@
 
 ## Objective
 
-Maintain a local-first PHP/MySQL application for two separate wax flows:
-
-1. processing customer wax held in custody
-2. purchasing company-owned wax
-
-The app must preserve stock traceability and never mix custody wax with purchased wax.
+Maintain a local-first operational app for wax processing and wax purchase workflows, with strict stock separation, traceable documents, and machine-portable deployment through XAMPP.
 
 ## Core Principles
 
 - quantities are stored as integer grams
-- UI displays kg with three decimals
+- UI displays kilograms with three decimals
 - inventory movements are append-only
-- critical settings should not silently fall back
-- settings are configured by admin only
-- operators should see operational errors and ask admin for fixes
+- critical config should not silently fall back
+- settings are configured by admin-capable users
+- operators should see operational errors and ask admin to fix missing setup
+- business calculations belong in services, not in views
 
 ## Roles
 
-Roles:
+Current roles:
 
 - `admin`
 - `operator`
 
-Local seed login:
-
-- user: `admin`
-- password: `admin`
-
-Production reset seed login:
+Production-style reset seed from SQL:
 
 - user: `admin`
 - password: `CearaAdmin!2026`
 
-## Dashboard And Flow Selection
+Business rule:
 
-Dashboard exposes two flows:
+- one user works on one gestiune
+- one gestiune may have multiple users
 
-- `Schimb de ceara`
-- `Achizitie ceara`
+## Navigation
 
-General navigation:
+Main navigation:
 
 - Dashboard
 - Documente
@@ -64,34 +55,51 @@ Purchase navigation:
 - Iesire ceara
 - Registru achizitie
 
+## Stock Model
+
+Separate stock buckets:
+
+- `wax_custody`
+- `foundation_operational`
+- `wax_purchased`
+
+They must never mix.
+
 ## Processing Flow
 
 ### Create Processing Lot
 
 Inputs:
 
-- PF/PJ customer data
+- customer type `PF` / `PJ`
 - processor
 - gross wax kg
 - processing price
 - shrinkage
 
-Default source:
+PF required fields:
 
-- processor is taken from assigned store
-- price and shrinkage are taken from assigned store
-- user can still edit the lot values in the form
+- customer name
+- phone
+- address
 
-Strict rules:
+PJ required fields:
 
-- assigned store is required
-- assigned store processor is required
-- lot processing price is required
-- lot shrinkage is required
-- backend no longer falls back to processor values if the form is incomplete
+- company name
+- CUI
+- phone
+- address
+- representative
+
+Lookup behavior:
+
+- PF lookup by phone while typing
+- PJ lookup by CUI while typing
+- ANAF data is only prefill help; final saved values are the edited form values at submit
 
 Save behavior:
 
+- create/update customer
 - create `processing_lots`
 - snapshot `processing_price_cents` and `shrinkage_pct`
 - create `RECEIVE_WAX_FROM_CLIENT`
@@ -102,40 +110,59 @@ Save behavior:
 
 Shows:
 
-- calculated balances
+- simplified summary cards
+- collapsible detail area
 - movement journal
 - generated documents
 
-Actions:
+Main user-facing summary meanings:
 
-- exchange wax with client
-- return wax to client
+- wax received
+- wax already exchanged and wax still available to exchange
+- foundations already handed over and foundations still possible to hand over
+- wax returned
+- lot state
 
 Rules:
 
 - exchange cannot exceed exchangeable wax
-- exchange cannot make `foundation_operational` negative
-- service value uses lot snapshot price
-- foundation quantity uses lot snapshot shrinkage
-- return cannot exceed wax still in custody
+- exchange cannot exceed available `foundation_operational`
+- return cannot exceed current custody wax
+- lot calculations use the lot snapshot values
+
+Important operational meaning:
+
+- exchanging foundations to the client does not remove custody wax
+- custody wax leaves only when sent to factory, returned to the client, or recorded as loss
 
 ### Factory Delivery
 
-- only for processing stock
-- uses the selected or assigned processor
-- no fallback to the first processor in DB
-- if no valid processor exists, screen must fail with clear error
-- sent wax decreases `wax_custody`
-- expected foundation increases `foundation_operational`
+- separate page from lot board
+- processor-scoped
+- page shows only lots for the selected processor
+- each row supports delivered quantity and rejected quantity
+- operator fills `aviz_number` and `aviz_date`
+
+Batch save behavior:
+
+- create `factory_batches`
+- create `factory_batch_items`
+- create `SEND_WAX_TO_FACTORY` movement where applicable
+- create `FACTORY_REJECT_WAX` movement where applicable
+- create `RECEIVE_FOUNDATION_FROM_FACTORY` movement for delivered quantity
+- decrease `wax_custody`
+- increase `foundation_operational`
+- auto-generate `AVIZ`
+- auto-generate `NIR`
 
 ### Factory Buffer
 
-- adjusts `foundation_operational` by external aviz
+- adjusts `foundation_operational`
 - `plus` increases stock
-- `minus` decreases stock and cannot go negative
-- each adjustment issues linked `NIR`
+- `minus` decreases stock
+- minus cannot exceed available operational stock
 
-Buffer adjustment fields:
+Fields:
 
 - adjustment type
 - aviz number
@@ -145,39 +172,59 @@ Buffer adjustment fields:
 - store
 - notes
 
-Both dates default to today in UI.
+Each adjustment issues linked `NIR`.
 
 ### Processing Register
 
-Store-scoped register from `inventory_transactions`.
-
-Filters:
-
-- date start
-- date end
+Store-scoped register based on `inventory_transactions`.
 
 Shows:
 
-- current totals
-- opening balance
-- closing balance
+- opening balances
+- closing balances
+- current balances
 - partner
 - lot link
 - document link
-- date
-- signed wax custody quantity
-- signed foundation quantity
+- signed wax qty
+- signed foundation qty
 - operator
+
+Register rows should link to the actual generated document rows whenever those documents exist.
+
+## Lot State Logic
+
+Movement types:
+
+- `RECEIVE_WAX_FROM_CLIENT`
+- `EXCHANGE_WAX_WITH_CLIENT`
+- `RETURN_WAX_TO_CLIENT`
+- `SEND_WAX_TO_FACTORY`
+- `RECEIVE_FOUNDATION_FROM_FACTORY`
+- `FACTORY_REJECT_WAX`
+- `RECORD_LOSS`
+- `RECOVER_FOUNDATION_FROM_CLIENT`
+
+Current important balance rules:
+
+- custody wax = received - sent to factory - returned - wax loss
+- exchangeable wax = received - exchanged - returned - wax loss
+- exchangeable foundations = shrinkage-applied result of exchangeable wax
+- open rejected wax = rejected - returned - wax loss
+
+Current calculated operational states:
+
+- `Procesare`
+- `Recuperare`
+- `Inchis`
+
+Lot closes when custody reaches zero and no open derived balances remain.
 
 ## Purchase Flow
 
-Purchase stock:
+Purchase stock bucket:
 
 - `wax_purchased`
-
-Must never use:
-
-- `wax_custody`
 
 ### Purchase Entry
 
@@ -187,19 +234,12 @@ Supplier types:
 - `Producator agricol`
 - `PJ/PFA`
 
-Store defaults:
-
-- purchase shrinkage
-- purchase price with VAT
-
-These defaults come from `stores`.
-
 Save behavior:
 
 - create/update supplier
 - create `purchase_lots`
 - add positive `wax_purchased`
-- do not generate internal PDF
+- keep external commercial references
 
 ### Purchase Exit
 
@@ -219,11 +259,7 @@ Save behavior:
 
 ## Documents
 
-Internal generated document counters live in:
-
-- `document_series`
-
-Current managed internal types:
+Internal managed types:
 
 - `PV-CUST`
 - `PV-FAG`
@@ -233,69 +269,42 @@ Current managed internal types:
 - `BON`
 - `BORD`
 
-FGO invoice series is mapped from:
+Invoice path:
 
-- `stores.fgo_series`
+- `FACT` uses FGO series from `stores.fgo_series`
 
-Strict rules:
+Rules:
 
-- missing internal document series => runtime error
+- missing internal series => runtime error
 - missing store FGO series => runtime error
 - missing FGO URL/token/CUI => runtime error
 - invalid FGO response without final series/number => runtime error
 
-PDF storage:
+Storage:
 
-- `storage/documents/<store_code>/`
-
-FiscalWire storage:
-
-- `storage/fiscalwire-out/`
-
-FiscalWire current hardcoded operational values:
-
-- article name `Servicii procesare`
-- VAT code `1`
-- extension `.inp`
+- PDFs: `storage/documents/<store_code>/`
+- FiscalWire output: `storage/fiscalwire-out/`
 
 ## Settings
 
-### Company
+Current recommended first-run order:
 
-- company name
-- CUI
-- registry number
-- address
-- phone
-- email
-- FGO URL
-- FGO token
-
-### Stores
-
-- code
-- name
-- address
-- FGO series
-- assigned processor
-- processing shrinkage %
-- processing price lei/kg
-- purchase shrinkage %
-- purchase price lei/kg
-
-### Processors
-
-Active processor fields:
-
-- name
-- CUI
-- address
-- processing price lei/kg in relation with processor
-- processor shrinkage %
-
-Removed dead processor/company legacy fields should no longer be reused.
+1. `Date societate`
+2. `Procesatori`
+3. `Gestiuni`
+4. `Serii documente`
+5. `Roluri si drepturi`
+6. `Creare useri`
+7. `Template documente`
+8. `Schimba parola`
 
 ## Local Runtime
+
+Current machine locations:
+
+- source: `E:\NovaLupus\ceara`
+- XAMPP deploy: `E:\XAMP\htdocs\ceara`
+- local URL: `http://localhost/ceara/`
 
 Required local DB config:
 
@@ -306,8 +315,6 @@ Required local sync target file:
 
 - ignored `config/xampp-target.local.txt`
 
-Startup no longer auto-creates default stores/processors.
-
 ## Deployment
 
 ### Local
@@ -316,15 +323,8 @@ Startup no longer auto-creates default stores/processors.
 
 ### Production
 
-Current expected production deployment mode:
+Expected model:
 
-1. delete all old files from app folder
-2. extract fresh full archive
-3. run full reset SQL on selected DB
-4. open app and configure admin-side settings
-
-Main files:
-
-- `deploy/sql/init-production.sql`
-- `deploy/DEPLOY_PRODUCTION.md`
-- release zip in `deploy/output/`
+1. replace app files with fresh archive
+2. run `deploy/sql/init-production.sql` on the target DB when doing a clean reset
+3. configure settings in-app

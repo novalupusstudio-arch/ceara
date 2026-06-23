@@ -16,8 +16,55 @@ $movementLabels = [
 
 $docButton = static function (array $lot, int $movementId, string $type, string $label, array $documents, string $paymentMethod = ''): void {
     $key = $movementId . ':' . $type;
-    $exists = !empty($documents[$key]);
-    $buttonLabel = ($exists ? 'Print ' : 'Genereaza ') . $label;
+    $entries = $documents[$key] ?? [];
+    $isIssued = false;
+    $isDisabled = false;
+    $buttonLabel = 'Genereaza ' . $label;
+
+    if ($type === 'FACT') {
+        foreach ($entries as $entry) {
+            if (!empty($entry['external_url'])) {
+                $isIssued = true;
+                break;
+            }
+        }
+        if ($isIssued) {
+            $buttonLabel = 'Print ' . $label;
+        }
+    } elseif ($type === 'BON') {
+        $issuedPaymentMethod = '';
+        foreach ($entries as $entry) {
+            if (!empty($entry['file_path'])) {
+                $isIssued = true;
+                $notes = strtolower((string) ($entry['notes'] ?? ''));
+                if (str_contains($notes, 'bon fiscalwire card')) {
+                    $issuedPaymentMethod = 'card';
+                } elseif (str_contains($notes, 'bon fiscalwire numerar')) {
+                    $issuedPaymentMethod = 'cash';
+                }
+                break;
+            }
+        }
+
+        if ($isIssued) {
+            if ($issuedPaymentMethod === ($paymentMethod === 'card' ? 'card' : 'cash')) {
+                $buttonLabel = 'Retipareste ' . $label;
+            } else {
+                $buttonLabel = 'Bon ' . ($issuedPaymentMethod === 'card' ? 'card' : 'numerar') . ' emis';
+                $isDisabled = true;
+            }
+        }
+    } else {
+        foreach ($entries as $entry) {
+            if (!empty($entry['file_path'])) {
+                $isIssued = true;
+                break;
+            }
+        }
+        if ($isIssued) {
+            $buttonLabel = 'Print ' . $label;
+        }
+    }
     ?>
     <form method="post" class="inline-form" target="_blank">
         <input type="hidden" name="action" value="processing_document">
@@ -27,7 +74,7 @@ $docButton = static function (array $lot, int $movementId, string $type, string 
         <?php if ($paymentMethod !== ''): ?>
             <input type="hidden" name="payment_method" value="<?= h($paymentMethod) ?>">
         <?php endif; ?>
-        <button class="secondary compact" type="submit"><?= h($buttonLabel) ?></button>
+        <button class="secondary compact" type="submit" <?= $isDisabled ? 'disabled' : '' ?>><?= h($buttonLabel) ?></button>
     </form>
     <?php
 };
@@ -81,21 +128,65 @@ $docButton = static function (array $lot, int $movementId, string $type, string 
 
 <section class="panel">
     <h2>Situatie curenta lot</h2>
-    <div class="lot-metric-grid">
-        <div><span>Total ceara primita</span><strong><?= h(grams_to_kg((int) $summary['total_received_g'])) ?></strong></div>
-        <div><span>Ceara in custodie</span><strong><?= h(grams_to_kg((int) $summary['wax_custody_g'])) ?></strong></div>
-        <div><span>Ceara schimbata client</span><strong><?= h(grams_to_kg((int) $summary['wax_exchanged_g'])) ?></strong></div>
-        <div><span>Faguri predati client</span><strong><?= h(grams_to_kg((int) $summary['foundation_delivered_g'])) ?></strong></div>
-        <div><span>Ceara de procesat</span><strong><?= h(grams_to_kg((int) $summary['wax_to_factory_g'])) ?></strong></div>
-        <div><span>Ceara predat fabricii</span><strong><?= h(grams_to_kg((int) $summary['wax_sent_factory_g'])) ?></strong></div>
-        <div><span>Faguri primiti fabrica</span><strong><?= h(grams_to_kg((int) $summary['foundation_received_factory_g'])) ?></strong></div>
-        <div><span>Ceara refuzata fabrica</span><strong><?= h(grams_to_kg((int) $summary['wax_rejected_factory_g'])) ?></strong></div>
-        <div><span>Ceara returnata client</span><strong><?= h(grams_to_kg((int) $summary['wax_returned_client_g'])) ?></strong></div>
-        <div><span>Faguri de recuperat</span><strong><?= h(grams_to_kg((int) $summary['foundation_to_recover_g'])) ?></strong></div>
-        <div><span>Faguri de predat</span><strong><?= h(grams_to_kg((int) $summary['foundation_to_client_g'])) ?></strong></div>
-        <div><span>Pierdere</span><strong><?= h(grams_to_kg((int) $summary['loss_g'])) ?></strong></div>
+    <div class="lot-summary-grid">
+        <div class="lot-summary-card lot-summary-card-primary">
+            <span class="lot-summary-label">Ceara primita</span>
+            <strong class="lot-summary-value"><?= h(grams_to_kg((int) $summary['total_received_g'])) ?></strong>
+        </div>
+        <div class="lot-summary-card">
+            <span class="lot-summary-label">Ceara lotului</span>
+            <div class="lot-summary-split">
+                <div>
+                    <span class="lot-summary-mini-label">Ramasa in custodie</span>
+                    <strong class="lot-summary-split-value"><?= h(grams_to_kg((int) $summary['wax_custody_g'])) ?></strong>
+                </div>
+                <div>
+                    <span class="lot-summary-mini-label">Data la schimb</span>
+                    <strong class="lot-summary-split-value"><?= h(grams_to_kg((int) $summary['wax_exchanged_g'])) ?></strong>
+                </div>
+            </div>
+        </div>
+        <div class="lot-summary-card">
+            <span class="lot-summary-label">Faguri client</span>
+            <div class="lot-summary-split">
+                <div>
+                    <span class="lot-summary-mini-label">Deja predati</span>
+                    <strong class="lot-summary-split-value"><?= h(grams_to_kg((int) $summary['foundation_delivered_g'])) ?></strong>
+                </div>
+                <div>
+                    <span class="lot-summary-mini-label">Se mai pot da</span>
+                    <strong class="lot-summary-split-value"><?= h(grams_to_kg((int) $summary['foundation_available_for_exchange_g'])) ?></strong>
+                </div>
+            </div>
+        </div>
+        <div class="lot-summary-card">
+            <span class="lot-summary-label">Retur si stare</span>
+            <div class="lot-summary-split">
+                <div>
+                    <span class="lot-summary-mini-label">Ceara returnata</span>
+                    <strong class="lot-summary-split-value"><?= h(grams_to_kg((int) $summary['wax_returned_client_g'])) ?></strong>
+                </div>
+                <div>
+                    <span class="lot-summary-mini-label">Stare lot</span>
+                    <strong class="lot-summary-split-value"><?= h($summary['calculated_status']) ?></strong>
+                </div>
+            </div>
+        </div>
     </div>
 </section>
+
+<details class="panel lot-details-panel <?= (int) $summary['wax_rejected_factory_g'] > 0 ? 'lot-details-panel-alert' : '' ?>">
+    <summary>Detalii lot</summary>
+    <div class="lot-metric-grid lot-metric-grid-details">
+        <div><span>Ceara pregatita pentru fabrica</span><strong><?= h(grams_to_kg((int) $summary['wax_to_factory_g'])) ?></strong></div>
+        <div><span>Ceara trimisa la fabrica</span><strong><?= h(grams_to_kg((int) $summary['wax_sent_factory_g'])) ?></strong></div>
+        <div><span>Faguri intrati de la fabrica</span><strong><?= h(grams_to_kg((int) $summary['foundation_received_factory_g'])) ?></strong></div>
+        <div><span>Ceara refuzata de fabrica</span><strong><?= h(grams_to_kg((int) $summary['wax_rejected_factory_g'])) ?></strong></div>
+        <div><span>Faguri de recuperat de la client</span><strong><?= h(grams_to_kg((int) $summary['foundation_to_recover_g'])) ?></strong></div>
+        <div><span>Pierdere inregistrata</span><strong><?= h(grams_to_kg((int) $summary['loss_g'])) ?></strong></div>
+        <div><span>Faguri disponibili pentru schimb nou</span><strong><?= h(grams_to_kg((int) $summary['foundation_available_for_exchange_g'])) ?></strong></div>
+    </div>
+</details>
 
 <section class="panel">
     <h2>Operatii ceara</h2>
@@ -198,7 +289,7 @@ $docButton = static function (array $lot, int $movementId, string $type, string 
 
     <div class="panel">
         <h2>Retur ceara</h2>
-        <form method="post" class="form-grid compact-form">
+        <form method="post" class="form-grid compact-form" data-return-form data-max-return-kg="<?= h(number_format(((int) $summary['wax_custody_g']) / 1000, 3, '.', '')) ?>">
             <input type="hidden" name="action" value="processing_return">
             <input type="hidden" name="lot_id" value="<?= h((string) $lot['id']) ?>">
             <label>
@@ -212,11 +303,12 @@ $docButton = static function (array $lot, int $movementId, string $type, string 
                     max="<?= h(number_format(((int) $summary['wax_custody_g']) / 1000, 3, '.', '')) ?>"
                     step="0.001"
                     placeholder="1.000"
+                    data-return-qty
                 >
             </label>
             <label>
                 Ceara in custodie
-                <input value="<?= h(grams_to_kg((int) $summary['wax_custody_g'])) ?>" readonly>
+                <input value="<?= h(grams_to_kg((int) $summary['wax_custody_g'])) ?>" readonly data-return-available>
             </label>
             <label class="wide">
                 Motiv / observatii

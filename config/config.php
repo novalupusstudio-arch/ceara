@@ -2,8 +2,8 @@
 
 $config = [
     'app_name' => 'Ceara',
-    'app_version' => '1.1.006',
-    'seed_defaults' => getenv('CEARA_SEED_DEFAULTS') !== '0',
+    'app_version' => '1.2.000',
+    'seed_defaults' => getenv('CEARA_SEED_DEFAULTS') === '1',
     'db' => [
         'host' => getenv('CEARA_DB_HOST') ?: '',
         'port' => getenv('CEARA_DB_PORT') ?: '',

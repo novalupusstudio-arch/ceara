@@ -21,16 +21,15 @@
             <?php endif; ?>
             <label>
                 Utilizator
-                <input name="username" autocomplete="username" value="admin" required>
+                <input name="username" autocomplete="username" required>
             </label>
             <label>
                 Parola
-                <input type="password" name="password" autocomplete="current-password" value="admin" required>
+                <input type="password" name="password" autocomplete="current-password" required>
             </label>
             <button class="primary" type="submit">Intra in aplicatie</button>
-            <p class="muted">Initial: admin / admin</p>
+            <p class="muted">Credentialele initiale sunt definite de seed-ul instalarii.</p>
         </form>
     </main>
 </body>
 </html>
-

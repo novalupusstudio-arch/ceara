@@ -214,6 +214,8 @@ CREATE TABLE IF NOT EXISTS factory_batches (
     batch_number VARCHAR(40) NOT NULL UNIQUE,
     processor_id INT NOT NULL,
     store_id INT NOT NULL,
+    aviz_number VARCHAR(80) NOT NULL DEFAULT '',
+    aviz_date DATE NULL,
     wax_g INT NOT NULL,
     foundation_g INT NOT NULL,
     processing_cost_cents INT NOT NULL DEFAULT 0,

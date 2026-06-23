@@ -246,9 +246,14 @@ final class ProcessingWriteService
     public function createFactoryBatch(array $data, int $userId): int
     {
         $processorId = (int) ($data['processor_id'] ?? 0);
+        $avizNumber = trim((string) ($data['aviz_number'] ?? ''));
+        $avizDate = $this->normalizeDate((string) ($data['aviz_date'] ?? '')) ?: date('Y-m-d');
         $processor = $this->find('processors', $processorId);
         if (!$processor) {
             throw new RuntimeException('Procesatorul selectat nu exista.');
+        }
+        if ($avizNumber === '') {
+            throw new RuntimeException('Numarul avizului este obligatoriu.');
         }
 
         $lotsInput = $data['lot_qty'] ?? [];
@@ -307,13 +312,15 @@ final class ProcessingWriteService
 
             $batchNumber = $this->nextLotNumber('FAB');
             $stmt = $this->pdo->prepare(
-                'INSERT INTO factory_batches (batch_number, processor_id, store_id, wax_g, foundation_g, processing_cost_cents, created_by)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)'
+                'INSERT INTO factory_batches (batch_number, processor_id, store_id, aviz_number, aviz_date, wax_g, foundation_g, processing_cost_cents, created_by)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
             );
             $stmt->execute([
                 $batchNumber,
                 $processorId,
                 (int) $selectedLots[0]['lot']['store_id'],
+                $avizNumber,
+                $avizDate,
                 $totalWax,
                 $totalFoundation,
                 $totalCostCents,
@@ -347,6 +354,10 @@ final class ProcessingWriteService
                 $this->inventory->record('wax_custody', -$totalWax, (int) $selectedLots[0]['lot']['store_id'], 'factory_batch', $batchId, 'Ceara trimisa la procesator');
                 $this->inventory->record('foundation_operational', $totalFoundation, (int) $selectedLots[0]['lot']['store_id'], 'factory_batch', $batchId, 'Faguri primiti de la procesator');
                 $this->documents->issue('AVIZ', 'factory_batch', $batchId, (int) $selectedLots[0]['lot']['store_id'], 'issued', 'Aviz catre procesator', [
+                    'factory_batch_id' => $batchId,
+                    'created_by' => $userId,
+                ]);
+                $this->documents->issue('NIR', 'factory_batch', $batchId, (int) $selectedLots[0]['lot']['store_id'], 'issued', 'NIR pentru aviz ' . $avizNumber, [
                     'factory_batch_id' => $batchId,
                     'created_by' => $userId,
                 ]);
@@ -428,9 +439,9 @@ final class ProcessingWriteService
         $lossFoundation = $foundation('RECORD_LOSS');
 
         $waxCustody = max(0, $received - $sentFactory - $returned - $lossWax);
-        $waxAvailableForExchange = max(0, $received - $exchanged - $sentFactory - $returned - $rejected - $lossWax);
+        $waxAvailableForExchange = max(0, $received - $exchanged - $returned - $lossWax);
         $waxToFactory = max(0, $exchanged - $sentFactory - $rejected);
-        $openRejectedWax = max(0, $rejected - $lossWax);
+        $openRejectedWax = max(0, $rejected - $returned - $lossWax);
         $exchangedWaxNotSentFactory = max(0, $exchanged - $sentFactory);
         $rejectedWaxWithFoundationDelivered = min($openRejectedWax, $exchangedWaxNotSentFactory);
         $foundationToRecover = max(0, $this->foundationForWax($rejectedWaxWithFoundationDelivered, (float) $lot['shrinkage_pct']) - $foundationRecovered - $lossFoundation);

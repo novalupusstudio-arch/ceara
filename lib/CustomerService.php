@@ -213,7 +213,7 @@ final class CustomerService
                 'address' => trim((string) ($data['customer_address'] ?? '')),
                 'identifier' => $customerType === 'PF'
                     ? trim((string) ($data['customer_identifier'] ?? ''))
-                    : trim((string) ($data['customer_identifier'] ?? $data['customer_cui'] ?? '')),
+                    : $this->processingCompanyIdentifier($data),
                 'cui' => trim((string) ($data['customer_cui'] ?? '')),
                 'representative' => trim((string) ($data['customer_representative'] ?? '')),
             ] + $this->customerLocationPayload($data);
@@ -238,7 +238,7 @@ final class CustomerService
                 : trim((string) $data['customer_address']),
             'identifier' => $customerType === 'PF'
                 ? trim((string) ($data['customer_identifier'] ?? ''))
-                : trim((string) ($data['customer_identifier'] ?? $data['customer_cui'] ?? '')),
+                : $this->processingCompanyIdentifier($data),
             'cui' => trim((string) ($data['customer_cui'] ?? '')),
             'representative' => trim((string) ($data['customer_representative'] ?? '')),
             'known_customer' => !empty($data['known_customer']),
@@ -346,6 +346,16 @@ final class CustomerService
         ];
     }
 
+    private function processingCompanyIdentifier(array $data): string
+    {
+        $identifier = trim((string) ($data['customer_identifier'] ?? ''));
+        if ($identifier !== '') {
+            return $identifier;
+        }
+
+        return trim((string) ($data['customer_cui'] ?? ''));
+    }
+
     private function matchSirutaLocation(string $countyName, string $localityText, string $postalCode = ''): array
     {
         $empty = [
@@ -361,9 +371,7 @@ final class CustomerService
             return $empty;
         }
 
-        $stmt = $this->pdo->prepare('SELECT * FROM siruta_counties WHERE normalized_name = ? LIMIT 1');
-        $stmt->execute([$countyNorm]);
-        $county = $stmt->fetch();
+        $county = $this->findCountyByName($countyName, $countyNorm);
         if (!$county) {
             return $empty;
         }
@@ -419,6 +427,30 @@ final class CustomerService
             'locality_name' => $locality ? (string) $locality['name'] : '',
             'locality_display_name' => $locality ? (string) $locality['display_name'] : '',
         ];
+    }
+
+    private function findCountyByName(string $countyName, string $countyNorm): ?array
+    {
+        $stmt = $this->pdo->prepare('SELECT * FROM siruta_counties WHERE normalized_name = ? LIMIT 1');
+        $stmt->execute([$countyNorm]);
+        $county = $stmt->fetch();
+        if ($county) {
+            return $county;
+        }
+
+        $likeNorm = '%' . $countyNorm . '%';
+        $likeName = '%' . strtoupper(trim($countyName)) . '%';
+        $stmt = $this->pdo->prepare(
+            'SELECT * FROM siruta_counties
+             WHERE normalized_name LIKE ?
+                OR UPPER(name) LIKE ?
+             ORDER BY CASE WHEN normalized_name LIKE ? THEN 0 ELSE 1 END, county_code
+             LIMIT 1'
+        );
+        $stmt->execute([$likeNorm, $likeName, $likeNorm]);
+        $county = $stmt->fetch();
+
+        return $county ?: null;
     }
 
     private function cleanCompanyAddress(string $address, string $countyName, string $localityName, string $postalCode): string

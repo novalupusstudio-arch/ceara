@@ -5,7 +5,8 @@ $currentRole = current_user()['role'];
 $canManageStores = (bool) ($rolePermissions[$currentRole]['STORE_MANAGE'] ?? false);
 $canManageProcessors = (bool) ($rolePermissions[$currentRole]['PROCESSOR_MANAGE'] ?? false);
 $canManageDocumentTemplates = (bool) ($rolePermissions[$currentRole]['DOCUMENT_TEMPLATE_MANAGE'] ?? false);
-$availableTabs = ['password' => 'Schimba parola'];
+
+$availableTabs = [];
 if ($canManageSecurity) {
     $availableTabs['company'] = 'Date societate';
 }
@@ -16,16 +17,18 @@ if ($canManageStores) {
     $availableTabs['stores'] = 'Gestiuni';
     $availableTabs['document_series'] = 'Serii documente';
 }
-if ($canManageDocumentTemplates) {
-    $availableTabs['document_templates'] = 'Template documente';
-}
 if ($canManageSecurity) {
     $availableTabs['roles'] = 'Roluri si drepturi';
     $availableTabs['users'] = 'Creare useri';
 }
-$activeTab = $_GET['settings_tab'] ?? 'password';
+if ($canManageDocumentTemplates) {
+    $availableTabs['document_templates'] = 'Template documente';
+}
+$availableTabs['password'] = 'Schimba parola';
+
+$activeTab = $_GET['settings_tab'] ?? array_key_first($availableTabs);
 if (!isset($availableTabs[$activeTab])) {
-    $activeTab = 'password';
+    $activeTab = array_key_first($availableTabs);
 }
 
 $storeNamesById = [];
@@ -218,52 +221,68 @@ foreach ($data['stores'] as $store) {
                 <input type="checkbox" name="active" checked>
                 Activ
             </label>
-            <div class="wide store-checks">
-                <span class="field-title">Gestiuni alocate</span>
-                <?php foreach ($data['stores'] as $store): ?>
-                    <label class="check-line">
-                        <input type="checkbox" name="store_ids[]" value="<?= h((string) $store['id']) ?>" checked>
-                        <?= h($store['name']) ?>
-                    </label>
-                <?php endforeach; ?>
-            </div>
+            <label>
+                Gestiune
+                <select name="store_id">
+                    <option value="0">Fara gestiune</option>
+                    <?php foreach ($data['stores'] as $store): ?>
+                        <option value="<?= h((string) $store['id']) ?>"><?= h($store['name']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </label>
             <button class="primary" type="submit">Creeaza user</button>
         </form>
     </section>
 
     <section class="panel">
         <h2>Useri existenti</h2>
-        <div class="table-wrap">
-            <table>
-                <thead>
-                    <tr>
-                        <th>User</th>
-                        <th>Nume</th>
-                        <th>Rol</th>
-                        <th>Gestiuni</th>
-                        <th>Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($data['users'] as $listedUser): ?>
-                        <?php
-                        $assignedNames = [];
-                        foreach (($data['user_stores'][(int) $listedUser['id']] ?? []) as $storeId) {
-                            if (isset($storeNamesById[$storeId])) {
-                                $assignedNames[] = $storeNamesById[$storeId];
-                            }
-                        }
-                        ?>
-                        <tr>
-                            <td><?= h($listedUser['username']) ?></td>
-                            <td><?= h($listedUser['full_name']) ?></td>
-                            <td><span class="status"><?= h($listedUser['role']) ?></span></td>
-                            <td><?= h($assignedNames ? implode(', ', $assignedNames) : '-') ?></td>
-                            <td><?= $listedUser['active'] ? 'Activ' : 'Inactiv' ?></td>
-                        </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
+        <div class="store-list">
+            <?php foreach ($data['users'] as $listedUser): ?>
+                <?php
+                $assignedStoreId = (int) (($data['user_stores'][(int) $listedUser['id']][0] ?? 0));
+                ?>
+                <form method="post" class="store-row">
+                    <input type="hidden" name="action" value="update_user">
+                    <input type="hidden" name="user_id" value="<?= h((string) $listedUser['id']) ?>">
+                    <label>
+                        Utilizator
+                        <input value="<?= h($listedUser['username']) ?>" disabled>
+                    </label>
+                    <label>
+                        Nume complet
+                        <input name="full_name" value="<?= h($listedUser['full_name']) ?>">
+                    </label>
+                    <label>
+                        Parola noua
+                        <input type="password" name="password" placeholder="Lasat gol = neschimbata">
+                    </label>
+                    <label>
+                        Rol
+                        <select name="role">
+                            <option value="operator" <?= $listedUser['role'] === 'operator' ? 'selected' : '' ?>>Operator</option>
+                            <option value="admin" <?= $listedUser['role'] === 'admin' ? 'selected' : '' ?>>Admin</option>
+                        </select>
+                    </label>
+                    <label>
+                        Gestiune
+                        <select name="store_id">
+                            <option value="0" <?= $assignedStoreId === 0 ? 'selected' : '' ?>>Fara gestiune</option>
+                            <?php foreach ($data['stores'] as $store): ?>
+                                <option value="<?= h((string) $store['id']) ?>" <?= (int) $store['id'] === $assignedStoreId ? 'selected' : '' ?>>
+                                    <?= h($store['name']) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </label>
+                    <label class="check-line">
+                        <input type="checkbox" name="active" <?= $listedUser['active'] ? 'checked' : '' ?>>
+                        Activ
+                    </label>
+                    <div class="panel-actions">
+                        <button class="primary" type="submit">Salveaza user</button>
+                    </div>
+                </form>
+            <?php endforeach; ?>
         </div>
     </section>
 <?php endif; ?>

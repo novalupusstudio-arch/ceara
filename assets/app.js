@@ -120,6 +120,37 @@ document.addEventListener("DOMContentLoaded", () => {
     renderExchangeValues();
   }
 
+  const returnForm = document.querySelector("[data-return-form]");
+  if (returnForm) {
+    const qtyInput = returnForm.querySelector("[data-return-qty]");
+    const availableOutput = returnForm.querySelector("[data-return-available]");
+    const maxReturnKg = Number(returnForm.dataset.maxReturnKg || 0);
+
+    function parseKg(value) {
+      return Number(String(value || "0").replace(",", "."));
+    }
+
+    function clampReturnValue() {
+      let waxKg = parseKg(qtyInput.value);
+      if (!Number.isFinite(waxKg) || waxKg < 0) {
+        waxKg = 0;
+      }
+
+      if (waxKg > maxReturnKg) {
+        waxKg = maxReturnKg;
+        qtyInput.value = maxReturnKg.toFixed(3);
+      }
+
+      if (availableOutput) {
+        availableOutput.value = formatKg(maxReturnKg);
+      }
+    }
+
+    qtyInput.addEventListener("input", clampReturnValue);
+    qtyInput.addEventListener("change", clampReturnValue);
+    clampReturnValue();
+  }
+
   const purchaseForm = document.querySelector("[data-purchase-form]");
   if (purchaseForm) {
     const typeInputs = purchaseForm.querySelectorAll("[data-purchase-type]");
@@ -316,6 +347,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let lookupTimer = null;
   let anafLookupSeq = 0;
   let localityLookupSeq = 0;
+  const countiesReady = populateCounties();
 
   function customerType() {
     const checked = Array.from(customerTypeInputs).find((input) => input.checked);
@@ -426,9 +458,18 @@ document.addEventListener("DOMContentLoaded", () => {
           customerLocality.value = String(selectedSiruta);
         }
         if (!customerLocality.value && selectedName) {
-          const normalized = selectedName.toLowerCase();
+          const normalized = String(selectedName)
+            .toLowerCase()
+            .replace(/^(municipiul|orasul|oras|comuna|satul|sat)\s+/i, "")
+            .replace(/\s+/g, " ")
+            .trim();
           const option = Array.from(customerLocality.options).find((item) => {
-            return (item.dataset.name || item.textContent || "").toLowerCase() === normalized;
+            const candidate = String(item.dataset.name || item.textContent || "")
+              .toLowerCase()
+              .replace(/^(municipiul|orasul|oras|comuna|satul|sat)\s+/i, "")
+              .replace(/\s+/g, " ")
+              .trim();
+            return candidate === normalized;
           });
           if (option) {
             customerLocality.value = option.value;
@@ -443,10 +484,27 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!customerCounty) {
       return;
     }
-    customerCounty.value = customer.county_code || "";
-    customerCountyName.value = customer.county_name || "";
-    customerPostalCode.value = customer.postal_code || "";
-    populateLocalities(customer.county_code || "", customer.locality_siruta || "", customer.locality_name || customer.locality_display_name || "");
+    countiesReady.finally(() => {
+      customerCounty.value = customer.county_code || "";
+      if (!customerCounty.value && customer.county_name) {
+        const normalizedCounty = String(customer.county_name)
+          .toLowerCase()
+          .replace(/\s+/g, " ")
+          .trim();
+        const countyOption = Array.from(customerCounty.options).find((option) => {
+          return (option.dataset.name || option.textContent || "")
+            .toLowerCase()
+            .replace(/\s+/g, " ")
+            .trim() === normalizedCounty;
+        });
+        if (countyOption) {
+          customerCounty.value = countyOption.value;
+        }
+      }
+      customerCountyName.value = customer.county_name || "";
+      customerPostalCode.value = customer.postal_code || "";
+      populateLocalities(customerCounty.value || customer.county_code || "", customer.locality_siruta || "", customer.locality_name || customer.locality_display_name || "");
+    });
   }
 
   function switchCustomerMode(nextType) {
@@ -695,7 +753,6 @@ document.addEventListener("DOMContentLoaded", () => {
     customerLocality.addEventListener("change", syncLocationHiddenFields);
   }
 
-  populateCounties();
   switchCustomerMode(customerType());
   if (processorSelect.options.length > 0 && !processorSelect.value) {
     processorSelect.value = processorSelect.options[0].value;

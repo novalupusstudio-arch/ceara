@@ -32,7 +32,7 @@ final class ProcessingDocumentService
         $referenceType = $movementId > 0 ? 'processing_lot_movement' : 'processing_lot';
         $referenceId = $movementId > 0 ? $movementId : $lotId;
         $stmt = $this->pdo->prepare(
-            'SELECT id, file_path, external_url FROM documents WHERE reference_type = ? AND reference_id = ? AND document_type = ? LIMIT 1'
+            'SELECT id, file_path, external_url, notes FROM documents WHERE reference_type = ? AND reference_id = ? AND document_type = ? LIMIT 1'
         );
         $stmt->execute([$referenceType, $referenceId, $documentType]);
         $existingDocument = $stmt->fetch();
@@ -40,7 +40,15 @@ final class ProcessingDocumentService
             if ($documentType === 'FACT') {
                 $this->fgo->emitInvoice((int) $existingDocument['id'], $lotId, $movementId, $userId);
             } elseif ($documentType === 'BON') {
-                $this->fiscalWire->exportReceipt((int) $existingDocument['id'], $lotId, $movementId, $paymentMethod, $userId);
+                if (!empty($existingDocument['file_path'])) {
+                    $issuedPaymentMethod = $this->receiptPaymentMethod($existingDocument);
+                    $requestedPaymentMethod = $paymentMethod === 'card' ? 'card' : 'cash';
+                    if ($issuedPaymentMethod !== '' && $issuedPaymentMethod !== $requestedPaymentMethod) {
+                        throw new RuntimeException('Bonul a fost deja emis pe ' . ($issuedPaymentMethod === 'card' ? 'card' : 'numerar') . '.');
+                    }
+                } else {
+                    $this->fiscalWire->exportReceipt((int) $existingDocument['id'], $lotId, $movementId, $paymentMethod, $userId);
+                }
             } elseif (empty($existingDocument['file_path'])) {
                 ($this->renderDocumentFile)((int) $existingDocument['id']);
             }
@@ -79,6 +87,19 @@ final class ProcessingDocumentService
         $row = $stmt->fetch();
 
         return $row ?: null;
+    }
+
+    private function receiptPaymentMethod(array $document): string
+    {
+        $notes = strtolower((string) ($document['notes'] ?? ''));
+        if (str_contains($notes, ' bon fiscalwire card ') || str_contains($notes, 'bon fiscalwire card')) {
+            return 'card';
+        }
+        if (str_contains($notes, ' bon fiscalwire numerar ') || str_contains($notes, 'bon fiscalwire numerar')) {
+            return 'cash';
+        }
+
+        return '';
     }
 
     private function logAudit(int $userId, string $operation, string $entity, ?int $entityId, ?string $old, ?string $new): void

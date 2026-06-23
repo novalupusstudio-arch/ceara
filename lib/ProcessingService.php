@@ -255,9 +255,10 @@ final class ProcessingService
         $lossFoundation = $foundation('RECORD_LOSS');
 
         $waxCustody = max(0, $received - $sentFactory - $returned - $lossWax);
-        $waxAvailableForExchange = max(0, $received - $exchanged - $sentFactory - $returned - $rejected - $lossWax);
+        $waxAvailableForExchange = max(0, $received - $exchanged - $returned - $lossWax);
+        $foundationAvailableForExchange = $this->foundationForWax($waxAvailableForExchange, (float) $lot['shrinkage_pct']);
         $waxToFactory = max(0, $exchanged - $sentFactory - $rejected);
-        $openRejectedWax = max(0, $rejected - $lossWax);
+        $openRejectedWax = max(0, $rejected - $returned - $lossWax);
         $exchangedWaxNotSentFactory = max(0, $exchanged - $sentFactory);
         $rejectedWaxWithFoundationDelivered = min($openRejectedWax, $exchangedWaxNotSentFactory);
         $foundationToRecover = max(0, $this->foundationForWax($rejectedWaxWithFoundationDelivered, (float) $lot['shrinkage_pct']) - $foundationRecovered - $lossFoundation);
@@ -276,6 +277,7 @@ final class ProcessingService
             'total_received_g' => $received,
             'wax_custody_g' => $waxCustody,
             'wax_available_for_exchange_g' => $waxAvailableForExchange,
+            'foundation_available_for_exchange_g' => $foundationAvailableForExchange,
             'wax_exchanged_g' => $exchanged,
             'foundation_delivered_g' => $foundationDelivered,
             'wax_to_factory_g' => $waxToFactory,
@@ -324,11 +326,12 @@ final class ProcessingService
             $stmt->execute([$referenceId]);
             $row = $stmt->fetch();
             if ($row) {
+                $document = $this->findDocumentByLotAndType((int) $row['id'], 'PV-CUST');
                 return [
                     'partner' => (string) $row['customer_name'],
                     'lot_number' => (string) $row['lot_number'],
                     'lot_url' => 'index.php?page=lot_detail&lot_id=' . (int) $row['id'],
-                    'document' => ['label' => 'PV-CUST', 'url' => ''],
+                    'document' => $this->documentLink($document, 'PV-CUST'),
                     'operator' => (string) $row['username'],
                     'created_at' => $row['created_at'],
                 ];
@@ -347,7 +350,7 @@ final class ProcessingService
             $stmt->execute([$referenceId]);
             $row = $stmt->fetch();
             if ($row) {
-                $document = match ((string) $row['movement_type']) {
+                $documentType = match ((string) $row['movement_type']) {
                     'EXCHANGE_WAX_WITH_CLIENT' => 'PV-FAG',
                     'RETURN_WAX_TO_CLIENT' => 'PV-RET',
                     'RECEIVE_WAX_FROM_CLIENT' => 'PV-CUST',
@@ -355,11 +358,12 @@ final class ProcessingService
                     'RECEIVE_FOUNDATION_FROM_FACTORY' => 'NIR',
                     default => '-',
                 };
+                $document = $documentType !== '-' ? $this->findDocumentByReference('processing_lot_movement', (int) $row['id'], $documentType) : null;
                 return [
                     'partner' => (string) $row['customer_name'],
                     'lot_number' => (string) $row['lot_number'],
                     'lot_url' => 'index.php?page=lot_detail&lot_id=' . (int) $row['lot_id'],
-                    'document' => ['label' => $document, 'url' => 'index.php?page=document_mock&document_id=' . (int) $row['id']],
+                    'document' => $this->documentLink($document, $documentType),
                     'operator' => (string) $row['username'],
                     'created_at' => $row['created_at'],
                 ];
@@ -377,11 +381,12 @@ final class ProcessingService
             $stmt->execute([$referenceId]);
             $row = $stmt->fetch();
             if ($row) {
+                $nirDocument = $this->findDocumentByReference('factory_batch', (int) $row['id'], 'NIR');
                 return [
                     'partner' => (string) $row['processor_name'],
-                    'lot_number' => '',
+                    'lot_number' => (string) ($row['aviz_number'] ?: $row['batch_number']),
                     'lot_url' => '',
-                    'document' => ['label' => 'AVIZ', 'url' => ''],
+                    'document' => $this->documentLink($nirDocument, 'NIR'),
                     'operator' => (string) $row['username'],
                     'created_at' => $row['created_at'],
                 ];
@@ -399,11 +404,12 @@ final class ProcessingService
             $stmt->execute([$referenceId]);
             $row = $stmt->fetch();
             if ($row) {
+                $document = $this->findDocumentByReference('factory_buffer_adjustment', (int) $row['id'], 'NIR');
                 return [
                     'partner' => (string) $row['store_name'],
                     'lot_number' => '',
                     'lot_url' => '',
-                    'document' => ['label' => 'NIR', 'url' => ''],
+                    'document' => $this->documentLink($document, 'NIR'),
                     'operator' => (string) $row['username'],
                     'created_at' => $row['created_at'],
                 ];
@@ -418,6 +424,48 @@ final class ProcessingService
             'operator' => '-',
             'created_at' => date('Y-m-d H:i:s'),
         ];
+    }
+
+    private function documentLink(?array $document, string $fallbackLabel): array
+    {
+        if (!$document) {
+            return ['label' => $fallbackLabel, 'url' => ''];
+        }
+
+        return [
+            'label' => (string) ($document['document_type'] ?? $fallbackLabel),
+            'url' => 'index.php?page=document_mock&document_id=' . (int) $document['id'],
+        ];
+    }
+
+    private function findDocumentByReference(string $referenceType, int $referenceId, string $documentType): ?array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT id, document_type
+             FROM documents
+             WHERE reference_type = ? AND reference_id = ? AND document_type = ?
+             ORDER BY id DESC
+             LIMIT 1'
+        );
+        $stmt->execute([$referenceType, $referenceId, $documentType]);
+        $row = $stmt->fetch();
+
+        return $row ?: null;
+    }
+
+    private function findDocumentByLotAndType(int $lotId, string $documentType): ?array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT id, document_type
+             FROM documents
+             WHERE lot_id = ? AND document_type = ?
+             ORDER BY id ASC
+             LIMIT 1'
+        );
+        $stmt->execute([$lotId, $documentType]);
+        $row = $stmt->fetch();
+
+        return $row ?: null;
     }
 
     private function userPrimaryStore(int $userId): ?array
