@@ -291,329 +291,32 @@ final class App
 
     public function createProcessingLot(array $data, int $userId): int
     {
-        $this->pdo->beginTransaction();
-        try {
-            $customer = $this->resolveProcessingCustomer($data);
-            $lotNumber = $this->nextLotNumber('PROC');
-            $gross = kg_to_grams($data['gross_kg']);
-            $processor = $this->processingProcessorData((int) $data['processor_id'], (int) $data['store_id']);
-            $shrinkage = (float) str_replace(',', '.', (string) ($data['shrinkage_pct'] ?? $processor['exchange_shrinkage_pct']));
-            $processingPriceCents = (int) round(((float) str_replace(',', '.', (string) ($data['processing_price'] ?? '0'))) * 100);
-            if ($processingPriceCents <= 0) {
-                $processingPriceCents = (int) $processor['processing_price_cents'];
-            }
-            $foundation = max(0, (int) round($gross * (1 - ($shrinkage / 100))));
-            $status = 'In Validare';
-
-            $stmt = $this->pdo->prepare(
-                'INSERT INTO processing_lots
-                (lot_number, customer_id, status, gross_g, processing_price_cents, shrinkage_pct, foundation_g, store_id, processor_id, created_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-            );
-            $stmt->execute([
-                $lotNumber,
-                $customer['id'],
-                $status,
-                $gross,
-                $processingPriceCents,
-                $shrinkage,
-                $foundation,
-                $data['store_id'],
-                $data['processor_id'] ?: null,
-                $userId,
-            ]);
-            $lotId = (int) $this->pdo->lastInsertId();
-
-            $this->inventory('wax_custody', $gross, (int) $data['store_id'], 'processing_lot', $lotId, 'Ceara client in custodie');
-            $movementId = $this->processingMovement($lotId, 'RECEIVE_WAX_FROM_CLIENT', $gross, 0, 0, trim((string) ($data['notes'] ?? '')), $userId);
-            $this->recordProcessingLotStatus($lotId, $status, $userId);
-            $this->document('PV-CUST', 'processing_lot_movement', $movementId, (int) $data['store_id'], 'issued', 'PV primire ceara in custodie', [
-                'lot_id' => $lotId,
-                'movement_id' => $movementId,
-                'created_by' => $userId,
-            ]);
-            $this->logAudit($userId, 'PROCESSING_CREATE', 'processing_lots', $lotId, null, $status);
-
-            $this->pdo->commit();
-            return $lotId;
-        } catch (Throwable $error) {
-            $this->pdo->rollBack();
-            throw $error;
-        }
+        return $this->processingWriteService()->createProcessingLot($data, $userId);
     }
 
     public function createProcessingExchange(int $lotId, string $waxKg, int $userId): int
     {
-        $summary = $this->processingLotSummary($lotId);
-        if (!$summary) {
-            throw new RuntimeException('Lotul nu exista.');
-        }
-
-        $wax = kg_to_grams($waxKg);
-        if ($wax <= 0) {
-            throw new RuntimeException('Cantitatea de schimb trebuie sa fie mai mare decat zero.');
-        }
-        if ($wax > $summary['wax_available_for_exchange_g']) {
-            throw new RuntimeException('Cantitatea de schimb depaseste ceara neschimbata din lot.');
-        }
-
-        $foundation = $this->foundationForWax($wax, (float) $summary['lot']['shrinkage_pct']);
-        $stock = $this->sumInventory('foundation_operational');
-        if ($foundation > $stock) {
-            throw new RuntimeException('Stocul operational de faguri este insuficient pentru acest schimb.');
-        }
-
-        $serviceValue = (int) round(($wax / 1000) * (int) $summary['lot']['processing_price_cents']);
-
-        $this->pdo->beginTransaction();
-        try {
-            $movementId = $this->processingMovement($lotId, 'EXCHANGE_WAX_WITH_CLIENT', $wax, $foundation, $serviceValue, '', $userId);
-            $this->inventory('foundation_operational', -$foundation, (int) $summary['lot']['store_id'], 'processing_lot_movement', $movementId, 'Faguri predati client la schimb');
-            $this->logAudit($userId, 'PROCESSING_EXCHANGE', 'processing_lot_movements', $movementId, null, (string) $lotId);
-            $this->pdo->commit();
-            return $movementId;
-        } catch (Throwable $error) {
-            $this->pdo->rollBack();
-            throw $error;
-        }
+        return $this->processingWriteService()->createProcessingExchange($lotId, $waxKg, $userId);
     }
 
     public function createProcessingReturn(int $lotId, string $waxKg, string $notes, int $userId): int
     {
-        $summary = $this->processingLotSummary($lotId);
-        if (!$summary) {
-            throw new RuntimeException('Lotul nu exista.');
-        }
-
-        $wax = kg_to_grams($waxKg);
-        if ($wax <= 0) {
-            throw new RuntimeException('Cantitatea de retur trebuie sa fie mai mare decat zero.');
-        }
-        if ($wax > $summary['wax_custody_g']) {
-            throw new RuntimeException('Cantitatea de retur depaseste ceara aflata in custodie.');
-        }
-
-        $this->pdo->beginTransaction();
-        try {
-            $movementId = $this->processingMovement($lotId, 'RETURN_WAX_TO_CLIENT', $wax, 0, 0, $notes, $userId);
-            $this->inventory('wax_custody', -$wax, (int) $summary['lot']['store_id'], 'processing_lot_movement', $movementId, 'Ceara returnata client');
-            $this->document('PV-RET', 'processing_lot_movement', $movementId, (int) $summary['lot']['store_id'], 'draft', 'PV retur ceara client', [
-                'lot_id' => $lotId,
-                'movement_id' => $movementId,
-                'created_by' => $userId,
-            ]);
-            $this->logAudit($userId, 'PROCESSING_RETURN', 'processing_lot_movements', $movementId, null, (string) $lotId);
-            $this->pdo->commit();
-            return $movementId;
-        } catch (Throwable $error) {
-            $this->pdo->rollBack();
-            throw $error;
-        }
+        return $this->processingWriteService()->createProcessingReturn($lotId, $waxKg, $notes, $userId);
     }
 
     public function createFactoryBufferAdjustment(array $data, int $userId): int
     {
-        $type = $data['adjustment_type'] === 'minus' ? 'minus' : 'plus';
-        $storeId = (int) ($data['store_id'] ?? 0);
-        $avizNumber = trim((string) ($data['aviz_number'] ?? ''));
-        $qty = kg_to_grams((string) ($data['qty_kg'] ?? '0'));
-        $notes = trim((string) ($data['notes'] ?? ''));
-
-        if (!$this->find('stores', $storeId)) {
-            throw new RuntimeException('Gestiunea selectata nu exista.');
-        }
-        if ($avizNumber === '') {
-            throw new RuntimeException('Numarul avizului este obligatoriu.');
-        }
-        if ($qty <= 0) {
-            throw new RuntimeException('Cantitatea trebuie sa fie mai mare decat zero.');
-        }
-
-        $signedQty = $type === 'plus' ? $qty : -$qty;
-        if ($signedQty < 0 && abs($signedQty) > $this->sumInventory('foundation_operational')) {
-            throw new RuntimeException('Avizul de minus depaseste stocul operational de faguri disponibil.');
-        }
-
-        $this->pdo->beginTransaction();
-        try {
-            $stmt = $this->pdo->prepare(
-                'INSERT INTO factory_buffer_adjustments
-                (adjustment_type, aviz_number, qty_g, store_id, notes, created_by)
-                VALUES (?, ?, ?, ?, ?, ?)'
-            );
-            $stmt->execute([$type, $avizNumber, $qty, $storeId, $notes, $userId]);
-            $adjustmentId = (int) $this->pdo->lastInsertId();
-
-            $this->inventory(
-                'foundation_operational',
-                $signedQty,
-                $storeId,
-                'factory_buffer_adjustment',
-                $adjustmentId,
-                'Aviz buffer fabrica ' . strtoupper($type) . ' ' . $avizNumber
-            );
-            $this->document('NIR', 'factory_buffer_adjustment', $adjustmentId, $storeId, 'issued', 'NIR buffer fabrica pentru aviz ' . $avizNumber, [
-                'created_by' => $userId,
-            ]);
-            $this->logAudit($userId, 'FACTORY_BUFFER_' . strtoupper($type), 'factory_buffer_adjustments', $adjustmentId, null, $avizNumber);
-
-            $this->pdo->commit();
-            return $adjustmentId;
-        } catch (Throwable $error) {
-            $this->pdo->rollBack();
-            throw $error;
-        }
+        return $this->processingWriteService()->createFactoryBufferAdjustment($data, $userId);
     }
 
     public function transitionProcessingLot(int $lotId, string $action, int $userId): void
     {
-        $lot = $this->find('processing_lots', $lotId);
-        if (!$lot) {
-            throw new RuntimeException('Lotul nu exista.');
-        }
-
-        $map = [
-            'accept' => ['from' => 'In Validare', 'to' => 'Acceptat', 'docs' => ['FACT', 'BON']],
-            'reject' => ['from' => 'In Validare', 'to' => 'Respins', 'docs' => []],
-            'return' => ['from' => 'Respins', 'to' => 'Returnat', 'docs' => ['PV-RET']],
-        ];
-
-        if (!isset($map[$action]) || $lot['status'] !== $map[$action]['from']) {
-            throw new RuntimeException('Tranzitie invalida pentru statusul curent.');
-        }
-
-        $this->pdo->beginTransaction();
-        try {
-            $newStatus = $map[$action]['to'];
-            $this->pdo->prepare('UPDATE processing_lots SET status = ? WHERE id = ?')->execute([$newStatus, $lotId]);
-            $this->recordProcessingLotStatus($lotId, $newStatus, $userId);
-            foreach ($map[$action]['docs'] as $type) {
-                $this->document($type, 'processing_lot', $lotId, (int) $lot['store_id'], 'mock', 'Document generat mock');
-            }
-            $this->logAudit($userId, 'PROCESSING_' . strtoupper($action), 'processing_lots', $lotId, $lot['status'], $newStatus);
-            $this->pdo->commit();
-        } catch (Throwable $error) {
-            $this->pdo->rollBack();
-            throw $error;
-        }
+        $this->processingWriteService()->transitionProcessingLot($lotId, $action, $userId);
     }
 
     public function createFactoryBatch(array $data, int $userId): int
     {
-        $processorId = (int) ($data['processor_id'] ?? 0);
-        $processor = $this->find('processors', $processorId);
-        if (!$processor) {
-            throw new RuntimeException('Procesatorul selectat nu exista.');
-        }
-
-        $lotsInput = $data['lot_qty'] ?? [];
-        $rejectInput = $data['reject_qty'] ?? [];
-        if ((!is_array($lotsInput) || !$lotsInput) && (!is_array($rejectInput) || !$rejectInput)) {
-            throw new RuntimeException('Alege cel putin un lot pentru predare sau respingere.');
-        }
-
-        $this->pdo->beginTransaction();
-        try {
-            $selectedLots = [];
-            $totalWax = 0;
-            $totalFoundation = 0;
-            $totalCostCents = 0;
-
-            $lotIds = array_unique(array_merge(array_keys((array) $lotsInput), array_keys((array) $rejectInput)));
-            foreach ($lotIds as $lotIdRaw) {
-                $lotId = (int) $lotIdRaw;
-                $qty = kg_to_grams((string) ($lotsInput[$lotIdRaw] ?? 0));
-                $rejectQty = kg_to_grams((string) ($rejectInput[$lotIdRaw] ?? 0));
-                if ($qty <= 0 && $rejectQty <= 0) {
-                    continue;
-                }
-
-                $lot = $this->find('processing_lots', $lotId);
-                if (!$lot) {
-                    throw new RuntimeException('Un lot selectat nu mai exista.');
-                }
-                if ((int) $lot['processor_id'] !== $processorId) {
-                    throw new RuntimeException('Toate loturile trebuie sa apartina procesatorului selectat.');
-                }
-                $summary = $this->processingLotSummary($lotId);
-                if (!$summary) {
-                    throw new RuntimeException('Un lot selectat nu mai exista.');
-                }
-                $remaining = (int) $summary['wax_custody_g'];
-                if ($qty + $rejectQty > $remaining) {
-                    throw new RuntimeException('Suma dintre predare si respingere depaseste ceara in custodie pentru un lot.');
-                }
-
-                $foundationQty = max(0, (int) round($qty * (1 - (((float) $processor['exchange_shrinkage_pct']) / 100))));
-                $selectedLots[] = [
-                    'lot' => $lot,
-                    'qty' => $qty,
-                    'reject_qty' => $rejectQty,
-                    'foundation_qty' => $foundationQty,
-                ];
-                $totalWax += $qty;
-                $totalFoundation += $foundationQty;
-                $totalCostCents += (int) round(($qty / 1000) * (int) $processor['processing_price_cents']);
-            }
-
-            if (!$selectedLots) {
-                throw new RuntimeException('Nu exista cantitati valide pentru predare sau respingere.');
-            }
-
-            $batchNumber = $this->nextLotNumber('FAB');
-            $stmt = $this->pdo->prepare(
-                'INSERT INTO factory_batches (batch_number, processor_id, store_id, wax_g, foundation_g, processing_cost_cents, created_by)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)'
-            );
-            $stmt->execute([
-                $batchNumber,
-                $processorId,
-                (int) $selectedLots[0]['lot']['store_id'],
-                $totalWax,
-                $totalFoundation,
-                $totalCostCents,
-                $userId,
-            ]);
-            $batchId = (int) $this->pdo->lastInsertId();
-
-            foreach ($selectedLots as $item) {
-                $lot = $item['lot'];
-                $qty = $item['qty'];
-                $rejectQty = $item['reject_qty'];
-                $foundationQty = $item['foundation_qty'];
-                if ($qty > 0) {
-                    $this->pdo->prepare(
-                        'INSERT INTO factory_batch_items (batch_id, processing_lot_id, wax_g) VALUES (?, ?, ?)'
-                    )->execute([$batchId, (int) $lot['id'], $qty]);
-
-                    $newSent = (int) $lot['factory_sent_g'] + $qty;
-                    $this->pdo->prepare(
-                        'UPDATE processing_lots SET factory_sent_g = ? WHERE id = ?'
-                    )->execute([$newSent, (int) $lot['id']]);
-                    $this->processingMovement((int) $lot['id'], 'SEND_WAX_TO_FACTORY', $qty, 0, 0, 'Predare batch ' . $batchNumber, $userId);
-                    $this->processingMovement((int) $lot['id'], 'RECEIVE_FOUNDATION_FROM_FACTORY', 0, $foundationQty, 0, 'Receptie automata batch ' . $batchNumber, $userId);
-                }
-                if ($rejectQty > 0) {
-                    $this->processingMovement((int) $lot['id'], 'FACTORY_REJECT_WAX', $rejectQty, 0, 0, 'Respingere fabrica batch ' . $batchNumber, $userId);
-                }
-            }
-
-            if ($totalWax > 0) {
-                $this->inventory('wax_custody', -$totalWax, (int) $selectedLots[0]['lot']['store_id'], 'factory_batch', $batchId, 'Ceara trimisa la procesator');
-                $this->inventory('foundation_operational', $totalFoundation, (int) $selectedLots[0]['lot']['store_id'], 'factory_batch', $batchId, 'Faguri primiti de la procesator');
-                $this->document('AVIZ', 'factory_batch', $batchId, (int) $selectedLots[0]['lot']['store_id'], 'issued', 'Aviz catre procesator', [
-                    'factory_batch_id' => $batchId,
-                    'created_by' => $userId,
-                ]);
-            }
-            $this->logAudit($userId, 'FACTORY_BATCH_CREATE', 'factory_batches', $batchId, null, $batchNumber);
-
-            $this->pdo->commit();
-            return $batchId;
-        } catch (Throwable $error) {
-            $this->pdo->rollBack();
-            throw $error;
-        }
+        return $this->processingWriteService()->createFactoryBatch($data, $userId);
     }
 
     public function ensureProcessingDocument(int $lotId, string $documentType, int $userId, int $movementId = 0, string $paymentMethod = 'cash'): int
@@ -1675,6 +1378,15 @@ final class App
     private function processingService(): ProcessingService
     {
         return new ProcessingService($this->pdo, $this->inventoryService());
+    }
+
+    private function processingWriteService(): \Ceara\ProcessingWriteService
+    {
+        return new \Ceara\ProcessingWriteService(
+            $this->pdo,
+            $this->inventoryService(),
+            fn (int $documentId) => $this->renderDocumentFile($documentId)
+        );
     }
 
     private function purchaseService(): \Ceara\PurchaseService

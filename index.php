@@ -16,6 +16,7 @@ require __DIR__ . '/lib/Auth.php';
 require __DIR__ . '/lib/App.php';
 require __DIR__ . '/lib/Http/PostActionDispatcher.php';
 require __DIR__ . '/lib/ProcessingService.php';
+require __DIR__ . '/lib/ProcessingWriteService.php';
 
 $config = require __DIR__ . '/config/config.php';
 $db = new Database($config);
