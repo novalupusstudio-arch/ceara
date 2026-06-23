@@ -192,117 +192,27 @@ final class App
 
     public function processingLots(): array
     {
-        return $this->pdo->query(
-            'SELECT p.*, c.name AS customer_name, c.customer_type, s.name AS store_name, pr.name AS processor_name
-             FROM processing_lots p
-             JOIN customers c ON c.id = p.customer_id
-             JOIN stores s ON s.id = p.store_id
-             LEFT JOIN processors pr ON pr.id = p.processor_id
-             ORDER BY p.id DESC'
-        )->fetchAll();
+        return $this->processingService()->processingLots();
     }
 
     public function factoryDeliveryData(int $processorId): array
     {
-        $processors = $this->processors();
-        $selectedProcessor = null;
-        foreach ($processors as $processor) {
-            if ((int) $processor['id'] === $processorId) {
-                $selectedProcessor = $processor;
-                break;
-            }
-        }
-        if (!$selectedProcessor) {
-            $selectedProcessor = $processors[0] ?? null;
-        }
-
-        $selectedProcessorId = $selectedProcessor ? (int) $selectedProcessor['id'] : 0;
-
-        $rows = [];
-        $totals = [
-            'wax_g' => 0,
-            'foundation_g' => 0,
-            'cost_cents' => 0,
-        ];
-
-        foreach ($this->processingLotSummaries() as $summary) {
-            $lot = $summary['lot'];
-            if ((int) $lot['processor_id'] !== $selectedProcessorId || $summary['wax_custody_g'] <= 0) {
-                continue;
-            }
-
-            $remaining = (int) $summary['wax_custody_g'];
-            $selected = $remaining;
-            $cost = (int) round(($selected / 1000) * (int) $selectedProcessor['processing_price_cents']);
-            $foundation = max(0, (int) round($selected * (1 - (((float) $selectedProcessor['exchange_shrinkage_pct']) / 100))));
-
-            $rows[] = [
-                'lot' => $lot,
-                'summary' => $summary,
-                'remaining_g' => $remaining,
-                'selected_g' => $selected,
-                'cost_cents' => $cost,
-                'foundation_g' => $foundation,
-            ];
-
-            $totals['wax_g'] += $selected;
-            $totals['foundation_g'] += $foundation;
-            $totals['cost_cents'] += $cost;
-        }
-
-        return [
-            'processors' => $processors,
-            'selected_processor' => $selectedProcessor,
-            'lots' => $rows,
-            'totals' => $totals,
-        ];
+        return $this->processingService()->factoryDeliveryData($processorId, fn () => $this->processingLotSummaries());
     }
 
     public function processingLotStatuses(): array
     {
-        return ['Procesare', 'Recuperare', 'Inchis'];
+        return $this->processingService()->processingLotStatuses();
     }
 
     public function processingLotsBoard(array $filters = []): array
     {
-        $selectedStatuses = array_values(array_filter(
-            array_map('trim', $filters),
-            fn ($status) => in_array($status, $this->processingLotStatuses(), true)
-        ));
-        if (!$selectedStatuses) {
-            $selectedStatuses = ['Procesare', 'Recuperare'];
-        }
-
-        $summaries = array_values(array_filter(
-            $this->processingLotSummaries(),
-            fn (array $summary) => in_array($summary['calculated_status'], $selectedStatuses, true)
-        ));
-
-        return [
-            'lots' => $summaries,
-            'selected_statuses' => $selectedStatuses,
-            'all_statuses' => $this->processingLotStatuses(),
-        ];
+        return $this->processingService()->processingLotsBoard($this->processingLotSummaries(), $filters);
     }
 
     public function factoryBufferData(): array
     {
-        return [
-            'stores' => $this->stores(),
-            'current_stock_g' => $this->sumInventory('foundation_operational'),
-            'adjustments' => $this->pdo->query(
-                'SELECT a.*, s.name AS store_name, u.username,
-                        d.id AS nir_document_id, d.series AS nir_series, d.number AS nir_number, d.document_type AS nir_type
-                 FROM factory_buffer_adjustments a
-                 JOIN stores s ON s.id = a.store_id
-                 JOIN users u ON u.id = a.created_by
-                 LEFT JOIN documents d ON d.reference_type = "factory_buffer_adjustment"
-                    AND d.reference_id = a.id
-                    AND d.document_type = "NIR"
-                 ORDER BY a.id DESC
-                 LIMIT 100'
-            )->fetchAll(),
-        ];
+        return $this->processingService()->factoryBufferData();
     }
 
     public function documentById(int $documentId): ?array
@@ -328,63 +238,12 @@ final class App
 
     public function processingRegisterData(int $userId, string $dateStart = '', string $dateEnd = ''): array
     {
-        $store = $this->userPrimaryStore($userId);
-        if (!$store) {
-            throw new RuntimeException('Utilizatorul nu are o gestiune alocata.');
-        }
-
-        $dateStart = $this->normalizeDate($dateStart) ?: date('Y-m-01');
-        $dateEnd = $this->normalizeDate($dateEnd) ?: date('Y-m-d');
-        if ($dateStart > $dateEnd) {
-            [$dateStart, $dateEnd] = [$dateEnd, $dateStart];
-        }
-        $periodStart = $dateStart . ' 00:00:00';
-        $periodEnd = $dateEnd . ' 23:59:59';
-
-        $rows = [];
-        foreach ($this->inventoryService()->processingRegisterRows((int) $store['id'], $periodStart, $periodEnd) as $row) {
-            $rows[] = array_merge($row, $this->processingRegisterMeta($row['reference_type'], (int) $row['reference_id']));
-        }
-
-        return [
-            'store' => $store,
-            'wax_total_g' => $this->sumInventoryForStore('wax_custody', (int) $store['id']),
-            'foundation_total_g' => $this->sumInventoryForStore('foundation_operational', (int) $store['id']),
-            'date_start' => $dateStart,
-            'date_end' => $dateEnd,
-            'opening_wax_g' => $this->sumInventoryForStoreUntil('wax_custody', (int) $store['id'], $periodStart, false),
-            'opening_foundation_g' => $this->sumInventoryForStoreUntil('foundation_operational', (int) $store['id'], $periodStart, false),
-            'closing_wax_g' => $this->sumInventoryForStoreUntil('wax_custody', (int) $store['id'], $periodEnd, true),
-            'closing_foundation_g' => $this->sumInventoryForStoreUntil('foundation_operational', (int) $store['id'], $periodEnd, true),
-            'rows' => $rows,
-        ];
+        return $this->processingService()->processingRegisterData($userId, $dateStart, $dateEnd);
     }
 
     public function processingLotDetail(int $lotId): array
     {
-        $summary = $this->processingLotSummary($lotId);
-        if (!$summary) {
-            throw new RuntimeException('Lotul nu exista.');
-        }
-
-        $stmt = $this->pdo->prepare(
-            'SELECT m.*, u.username
-             FROM processing_lot_movements m
-             JOIN users u ON u.id = m.created_by
-             WHERE m.lot_id = ?
-             ORDER BY m.id ASC'
-        );
-        $stmt->execute([$lotId]);
-        $movements = $stmt->fetchAll();
-
-        $documents = $this->documentsForLot($lotId);
-
-        return [
-            'summary' => $summary,
-            'movements' => $movements,
-            'documents' => $documents,
-            'foundation_stock_g' => $this->sumInventory('foundation_operational'),
-        ];
+        return $this->processingService()->processingLotDetail($lotId, fn (int $id) => $this->processingLotSummary($id));
     }
 
     public function purchaseLots(): array
@@ -2126,6 +1985,11 @@ final class App
             new \Ceara\Documents\TemplateRenderer(),
             new \Ceara\Documents\PdfRenderer()
         );
+    }
+
+    private function processingService(): ProcessingService
+    {
+        return new ProcessingService($this->pdo, $this->inventoryService());
     }
 
     private function inventory(string $type, int $qty, int $storeId, string $refType, int $refId, string $notes): void
