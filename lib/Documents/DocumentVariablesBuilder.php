@@ -112,7 +112,7 @@ final class DocumentVariablesBuilder
                 $qty = (int) $adjustment['qty_g'];
                 $type = (string) $adjustment['adjustment_type'];
                 $variables['aviz_number'] = (string) $adjustment['aviz_number'];
-                $variables['aviz_date'] = date('Y-m-d', strtotime((string) ($adjustment['created_at'] ?? $doc['created_at'] ?? 'now')));
+                $variables['aviz_date'] = date('Y-m-d', strtotime((string) ($adjustment['aviz_date'] ?? $adjustment['created_at'] ?? $doc['created_at'] ?? 'now')));
                 $variables['adjustment_type'] = $type;
                 $variables['adjustment_label'] = $type === 'minus' ? 'Iesire buffer faguri' : 'Intrare buffer faguri';
                 $variables['foundation_qty_kg'] = grams_to_kg($qty);

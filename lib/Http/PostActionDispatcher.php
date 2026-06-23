@@ -123,6 +123,8 @@ final class PostActionDispatcher
             $app->createFactoryBufferAdjustment([
                 'adjustment_type' => \post_string('adjustment_type'),
                 'aviz_number' => \post_string('aviz_number'),
+                'aviz_date' => \post_string('aviz_date'),
+                'reception_date' => \post_string('reception_date'),
                 'qty_kg' => \post_string('qty_kg'),
                 'store_id' => \post_int('store_id'),
                 'notes' => \post_string('notes'),
@@ -254,7 +256,6 @@ final class PostActionDispatcher
                 'address' => \post_string('processor_address'),
                 'processing_price' => \post_string('processing_price'),
                 'exchange_shrinkage_pct' => \post_string('exchange_shrinkage_pct'),
-                'purchase_shrinkage_pct' => \post_string('purchase_shrinkage_pct'),
             ], $user['id']);
             \flash('Procesatorul a fost salvat.');
             \redirect('settings', ['settings_tab' => 'processors']);
@@ -269,6 +270,15 @@ final class PostActionDispatcher
             \redirect('settings', ['settings_tab' => 'document_templates']);
         }
 
+        if ($action === 'save_document_series') {
+            if (!$app->roleHasPermission($user['role'], 'STORE_MANAGE')) {
+                throw new RuntimeException('Nu ai dreptul sa administrezi seriile de documente.');
+            }
+            $app->saveDocumentSeries($_POST['series'] ?? [], $user['id']);
+            \flash('Seriile documentelor au fost salvate.');
+            \redirect('settings', ['settings_tab' => 'document_series']);
+        }
+
         if ($action === 'save_company_settings') {
             if (!\is_initial_admin()) {
                 throw new RuntimeException('Doar adminul initial poate edita datele societatii.');
@@ -278,33 +288,15 @@ final class PostActionDispatcher
                 'vat_number' => \post_string('vat_number'),
                 'registry_number' => \post_string('registry_number'),
                 'address' => \post_string('address'),
-                'fgo_private_key' => \post_string('fgo_private_key'),
-
+                'phone' => \post_string('phone'),
+                'email' => \post_string('email'),
+                'fgo_url' => \post_string('fgo_url'),
+                'fgo_token' => \post_string('fgo_token'),
             ], $user['id']);
             \flash('Datele societatii au fost salvate.');
             \redirect('settings', ['settings_tab' => 'company']);
         }
 
-        if ($action === 'save_settings') {
-            $app->saveSettings([
-                'store_id' => \post_int('store_id'),
-                'store_code' => \post_string('store_code'),
-                'store_name' => \post_string('store_name'),
-                'store_address' => \post_string('store_address'),
-                'store_fgo_series' => \post_string('store_fgo_series'),
-                'store_processor_id' => \post_int('store_processor_id'),
-                'processor_id' => \post_int('processor_id'),
-                'processor_name' => \post_string('processor_name'),
-                'processor_cui' => \post_string('processor_cui'),
-                'processor_contact' => \post_string('processor_contact'),
-                'processing_price' => \post_string('processing_price'),
-                'exchange_shrinkage_pct' => \post_string('exchange_shrinkage_pct'),
-                'purchase_shrinkage_pct' => \post_string('purchase_shrinkage_pct'),
-                'series' => $_POST['series'] ?? [],
-            ], $user['id']);
-            \flash('Setarile au fost salvate.');
-            \redirect('settings');
-        }
     }
 
     public function handleError(Throwable $error, string $page): void

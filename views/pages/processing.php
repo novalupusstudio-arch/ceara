@@ -1,20 +1,16 @@
 <?php
-$processorsForJs = [];
-$defaultProcessorId = isset($data['default_processor']['id']) ? (int) $data['default_processor']['id'] : 0;
-foreach ($data['processors'] as $processor) {
-    $priceCents = (int) $processor['processing_price_cents'];
-    $shrinkagePct = (float) $processor['exchange_shrinkage_pct'];
-    if ($defaultProcessorId > 0 && (int) $processor['id'] === $defaultProcessorId && !empty($data['default_processor'])) {
-        $priceCents = (int) $data['default_processor']['processing_price_cents'];
-        $shrinkagePct = (float) $data['default_processor']['exchange_shrinkage_pct'];
-    }
-    $processorsForJs[] = [
-        'id' => (int) $processor['id'],
-        'name' => $processor['name'],
-        'processing_price_cents' => $priceCents,
-        'exchange_shrinkage_pct' => $shrinkagePct,
-    ];
+$assignedStore = $data['assigned_store'] ?? [];
+if (!$assignedStore) {
+    throw new RuntimeException('Utilizatorul nu are o gestiune alocata.');
 }
+
+$defaultProcessorId = (int) ($assignedStore['processor_id'] ?? 0);
+if ($defaultProcessorId <= 0) {
+    throw new RuntimeException('Gestiunea utilizatorului nu are procesator asignat.');
+}
+
+$defaultPriceCents = (int) ($assignedStore['processing_price_cents'] ?? 0);
+$defaultShrinkagePct = (float) ($assignedStore['processing_shrinkage_pct'] ?? 0);
 ?>
 
 <header class="page-header">
@@ -26,7 +22,7 @@ foreach ($data['processors'] as $processor) {
 
 <section class="panel">
     <h2>Lot nou</h2>
-    <form method="post" class="processing-form" data-processing-form data-processors='<?= h(json_encode($processorsForJs, JSON_UNESCAPED_UNICODE)) ?>'>
+    <form method="post" class="processing-form" data-processing-form>
         <input type="hidden" name="action" value="create_processing">
         <input type="hidden" name="existing_customer_id" value="0" data-existing-customer-id>
         <input type="hidden" name="force_new_customer" value="0" data-force-new-customer>
@@ -134,11 +130,11 @@ foreach ($data['processors'] as $processor) {
                 </label>
                 <label>
                     Pret procesare
-                    <input name="processing_price" required inputmode="decimal" value="0.00" data-processing-price>
+                    <input name="processing_price" required inputmode="decimal" value="<?= h(number_format($defaultPriceCents / 100, 2, '.', '')) ?>" data-processing-price>
                 </label>
                 <label>
                     Scazamant %
-                    <input name="shrinkage_pct" required inputmode="decimal" value="0.000" data-processing-shrinkage>
+                    <input name="shrinkage_pct" required inputmode="decimal" value="<?= h(number_format($defaultShrinkagePct, 3, '.', '')) ?>" data-processing-shrinkage>
                 </label>
             </div>
 

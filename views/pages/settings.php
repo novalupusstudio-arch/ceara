@@ -8,19 +8,21 @@ $canManageDocumentTemplates = (bool) ($rolePermissions[$currentRole]['DOCUMENT_T
 $availableTabs = ['password' => 'Schimba parola'];
 if ($canManageSecurity) {
     $availableTabs['company'] = 'Date societate';
-    $availableTabs['roles'] = 'Roluri si drepturi';
-    $availableTabs['users'] = 'Creare useri';
-}
-if ($canManageDocumentTemplates) {
-    $availableTabs['document_templates'] = 'Template documente';
-}
-if ($canManageStores) {
-    $availableTabs['stores'] = 'Gestiuni';
 }
 if ($canManageProcessors) {
     $availableTabs['processors'] = 'Procesatori';
 }
-
+if ($canManageStores) {
+    $availableTabs['stores'] = 'Gestiuni';
+    $availableTabs['document_series'] = 'Serii documente';
+}
+if ($canManageDocumentTemplates) {
+    $availableTabs['document_templates'] = 'Template documente';
+}
+if ($canManageSecurity) {
+    $availableTabs['roles'] = 'Roluri si drepturi';
+    $availableTabs['users'] = 'Creare useri';
+}
 $activeTab = $_GET['settings_tab'] ?? 'password';
 if (!isset($availableTabs[$activeTab])) {
     $activeTab = 'password';
@@ -83,13 +85,25 @@ foreach ($data['stores'] as $store) {
                 Nr. Reg. Com.
                 <input name="registry_number" value="<?= h((string) ($company['registry_number'] ?? '')) ?>">
             </label>
+            <label>
+                Telefon
+                <input name="phone" value="<?= h((string) ($company['phone'] ?? '')) ?>">
+            </label>
+            <label>
+                Email
+                <input name="email" type="email" value="<?= h((string) ($company['email'] ?? '')) ?>">
+            </label>
             <label class="wide">
                 Sediu
                 <input name="address" value="<?= h((string) ($company['address'] ?? '')) ?>">
             </label>
             <label class="wide">
-                API key FGO
-                <input type="password" name="fgo_private_key" autocomplete="off" value="<?= h((string) ($company['fgo_private_key'] ?? '')) ?>">
+                URL FGO
+                <input name="fgo_url" value="<?= h((string) ($company['fgo_url'] ?? '')) ?>" placeholder="https://api-testuat.fgo.ro/v1">
+            </label>
+            <label class="wide">
+                Token FGO
+                <input type="password" name="fgo_token" autocomplete="off" value="<?= h((string) ($company['fgo_token'] ?? '')) ?>">
             </label>
             <button class="primary" type="submit">Salveaza datele societatii</button>
         </form>
@@ -262,7 +276,7 @@ foreach ($data['stores'] as $store) {
             <input type="hidden" name="store_id" value="0">
             <label title="Alege un cod scurt, de preferat 2 litere uppercase, ex. BC, CJ, IS.">Cod <input name="store_code" required placeholder="BC" maxlength="8" pattern="[A-Z0-9_-]+" title="Cod scurt pentru serii, de preferat 2 litere uppercase: BC, CJ, IS."></label>
             <label>Denumire <input name="store_name" required placeholder="Magazin nou"></label>
-            <label>Seria FGO <input name="store_fgo_series" placeholder="FACT-BC"></label>
+            <label title="Trebuie sa existe deja in FGO. Exemplu: WAX-BC.">Serie factura FGO <input name="store_fgo_series" placeholder="WAX-BC"></label>
             <label>
                 Procesator asignat
                 <select name="store_processor_id" required>
@@ -272,10 +286,10 @@ foreach ($data['stores'] as $store) {
                 </select>
             </label>
             <label class="wide">Adresa <input name="store_address"></label>
-            <label>Scazamant procesare % <input name="store_processing_shrinkage_pct" inputmode="decimal" value="0"></label>
-            <label>Pret procesare lei/kg <input name="store_processing_price" inputmode="decimal" value="0.00"></label>
-            <label>Scazamant achizitie % <input name="store_purchase_shrinkage_pct" inputmode="decimal" value="0"></label>
-            <label>Pret achizitie lei/kg <input name="store_purchase_price" inputmode="decimal" value="0.00"></label>
+            <label title="Scazamant folosit in relatia gestiunii cu clientul.">Scazamant procesare client % <input name="store_processing_shrinkage_pct" inputmode="decimal" value="0"></label>
+            <label title="Pret folosit in relatia gestiunii cu clientul.">Pret procesare client lei/kg <input name="store_processing_price" inputmode="decimal" value="0.00"></label>
+            <label title="Scazamant folosit in relatia gestiunii cu furnizorul de achizitie.">Scazamant achizitie client % <input name="store_purchase_shrinkage_pct" inputmode="decimal" value="0"></label>
+            <label title="Pret folosit in relatia gestiunii cu furnizorul de achizitie.">Pret achizitie client lei/kg <input name="store_purchase_price" inputmode="decimal" value="0.00"></label>
             <button class="primary" type="submit">Adauga gestiune</button>
         </form>
     </section>
@@ -289,12 +303,12 @@ foreach ($data['stores'] as $store) {
                     <input type="hidden" name="store_id" value="<?= h((string) $store['id']) ?>">
                     <label title="Alege un cod scurt, de preferat 2 litere uppercase, ex. BC, CJ, IS.">Cod <input name="store_code" value="<?= h($store['code']) ?>" required maxlength="8" pattern="[A-Z0-9_-]+" title="Cod scurt pentru serii, de preferat 2 litere uppercase: BC, CJ, IS."></label>
                     <label>Denumire <input name="store_name" value="<?= h($store['name']) ?>" required></label>
-                    <label>Seria FGO <input name="store_fgo_series" value="<?= h((string) ($store['fgo_series'] ?? '')) ?>"></label>
+                    <label title="Trebuie sa existe deja in FGO. Exemplu: WAX-BC.">Serie factura FGO <input name="store_fgo_series" value="<?= h((string) ($store['fgo_series'] ?? '')) ?>"></label>
                     <label>Adresa <input name="store_address" value="<?= h($store['address']) ?>"></label>
-                    <label>Scazamant procesare % <input name="store_processing_shrinkage_pct" inputmode="decimal" value="<?= h((string) ($store['processing_shrinkage_pct'] ?? '0')) ?>"></label>
-                    <label>Pret procesare lei/kg <input name="store_processing_price" inputmode="decimal" value="<?= h(number_format(((int) ($store['processing_price_cents'] ?? 0)) / 100, 2, '.', '')) ?>"></label>
-                    <label>Scazamant achizitie % <input name="store_purchase_shrinkage_pct" inputmode="decimal" value="<?= h((string) ($store['purchase_shrinkage_pct'] ?? '0')) ?>"></label>
-                    <label>Pret achizitie lei/kg <input name="store_purchase_price" inputmode="decimal" value="<?= h(number_format(((int) ($store['purchase_price_cents_per_kg'] ?? 0)) / 100, 2, '.', '')) ?>"></label>
+                    <label title="Scazamant folosit in relatia gestiunii cu clientul.">Scazamant procesare client % <input name="store_processing_shrinkage_pct" inputmode="decimal" value="<?= h((string) ($store['processing_shrinkage_pct'] ?? '0')) ?>"></label>
+                    <label title="Pret folosit in relatia gestiunii cu clientul.">Pret procesare client lei/kg <input name="store_processing_price" inputmode="decimal" value="<?= h(number_format(((int) ($store['processing_price_cents'] ?? 0)) / 100, 2, '.', '')) ?>"></label>
+                    <label title="Scazamant folosit in relatia gestiunii cu furnizorul de achizitie.">Scazamant achizitie client % <input name="store_purchase_shrinkage_pct" inputmode="decimal" value="<?= h((string) ($store['purchase_shrinkage_pct'] ?? '0')) ?>"></label>
+                    <label title="Pret folosit in relatia gestiunii cu furnizorul de achizitie.">Pret achizitie client lei/kg <input name="store_purchase_price" inputmode="decimal" value="<?= h(number_format(((int) ($store['purchase_price_cents_per_kg'] ?? 0)) / 100, 2, '.', '')) ?>"></label>
                     <label>
                         Procesator
                         <select name="store_processor_id" required>
@@ -312,6 +326,63 @@ foreach ($data['stores'] as $store) {
     </section>
 <?php endif; ?>
 
+<?php if ($activeTab === 'document_series' && $canManageStores): ?>
+    <?php
+    $seriesLabels = [
+        'PV-CUST' => 'PV primire ceara',
+        'PV-FAG' => 'PV predare faguri',
+        'PV-RET' => 'PV retur ceara',
+        'AVIZ' => 'Aviz predare fabrica',
+        'NIR' => 'NIR',
+        'BON' => 'Bon',
+        'BORD' => 'Borderou',
+    ];
+    ?>
+    <section class="panel">
+        <h2>Serii documente</h2>
+        <p class="muted">Seria facturilor FGO se configureaza din Gestiuni. Aici administrezi doar seriile documentelor interne.</p>
+        <form method="post">
+            <input type="hidden" name="action" value="save_document_series">
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Gestiune</th>
+                            <th>Tip document</th>
+                            <th>Serie</th>
+                            <th>Urmatorul numar</th>
+                            <th>Exemplu</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($data['series'] as $series): ?>
+                            <?php
+                            $nextNumber = max(1, (int) $series['next_number']);
+                            $documentType = (string) $series['document_type'];
+                            $seriesValue = (string) $series['series'];
+                            ?>
+                            <tr>
+                                <td><?= h((string) $series['store_name']) ?></td>
+                                <td><?= h($seriesLabels[$documentType] ?? $documentType) ?></td>
+                                <td>
+                                    <input name="series[<?= h((string) $series['id']) ?>][series]" value="<?= h($seriesValue) ?>" required>
+                                </td>
+                                <td>
+                                    <input name="series[<?= h((string) $series['id']) ?>][next_number]" type="number" min="1" step="1" value="<?= h((string) $nextNumber) ?>" required>
+                                </td>
+                                <td><?= h($seriesValue . '-' . str_pad((string) $nextNumber, 4, '0', STR_PAD_LEFT)) ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+            <div class="panel-actions">
+                <button class="primary" type="submit">Salveaza seriile</button>
+            </div>
+        </form>
+    </section>
+<?php endif; ?>
+
 <?php if ($activeTab === 'processors' && $canManageProcessors): ?>
     <section class="panel">
         <h2>Adauga procesator PJ</h2>
@@ -321,9 +392,8 @@ foreach ($data['stores'] as $store) {
             <label>Nume <input name="processor_name" required placeholder="Procesator SRL"></label>
             <label>CUI <input name="processor_cui" required placeholder="RO123456"></label>
             <label class="wide">Adresa <input name="processor_address" required></label>
-            <label>Pret procesare <input name="processing_price" inputmode="decimal" value="0"></label>
-            <label>Scazamant % <input name="exchange_shrinkage_pct" inputmode="decimal" value="0"></label>
-            <input type="hidden" name="purchase_shrinkage_pct" value="0">
+            <label title="Pretul nostru in relatia cu procesatorul.">Pret procesare procesator lei/kg <input name="processing_price" inputmode="decimal" value="0"></label>
+            <label title="Scazamantul nostru in relatia cu procesatorul.">Scazamant procesator % <input name="exchange_shrinkage_pct" inputmode="decimal" value="0"></label>
             <button class="primary" type="submit">Adauga procesator</button>
         </form>
     </section>
@@ -338,9 +408,8 @@ foreach ($data['stores'] as $store) {
                     <label>Nume <input name="processor_name" value="<?= h($processor['name']) ?>" required></label>
                     <label>CUI <input name="processor_cui" value="<?= h($processor['cui']) ?>" required></label>
                     <label>Adresa <input name="processor_address" value="<?= h($processor['address'] ?? '') ?>" required></label>
-                    <label>Pret procesare <input name="processing_price" inputmode="decimal" value="<?= h((string) ($processor['processing_price_cents'] / 100)) ?>"></label>
-                    <label>Scazamant % <input name="exchange_shrinkage_pct" inputmode="decimal" value="<?= h((string) $processor['exchange_shrinkage_pct']) ?>"></label>
-                    <input type="hidden" name="purchase_shrinkage_pct" value="<?= h((string) $processor['purchase_shrinkage_pct']) ?>">
+                    <label title="Pretul nostru in relatia cu procesatorul.">Pret procesare procesator lei/kg <input name="processing_price" inputmode="decimal" value="<?= h((string) ($processor['processing_price_cents'] / 100)) ?>"></label>
+                    <label title="Scazamantul nostru in relatia cu procesatorul.">Scazamant procesator % <input name="exchange_shrinkage_pct" inputmode="decimal" value="<?= h((string) $processor['exchange_shrinkage_pct']) ?>"></label>
                     <button class="small" type="submit">Salveaza</button>
                 </form>
             <?php endforeach; ?>

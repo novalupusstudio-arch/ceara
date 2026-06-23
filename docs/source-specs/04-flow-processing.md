@@ -1,26 +1,54 @@
-﻿# Flow Processing Wax
+# Processing Flow
 
-## Current Flow
+## Pages
 
-1. Create a processing lot from `Procesare ceara`.
-2. Lot receives custody wax through `RECEIVE_WAX_FROM_CLIENT` and `wax_custody` inventory.
-3. The form defaults processing price and shrinkage from the assigned store/processor, but both values are editable for the lot.
-4. The lot snapshots `processing_price_cents` and `shrinkage_pct`; all later calculations use the saved lot values.
-5. Lot board and lot detail display calculated status/balances.
-6. Exchange wax with client from lot detail; this creates movement, service value and foundation stock decrease.
-7. Generate processing documents from movement rows: FGO invoice, FiscalWire receipt, PV-FAG, PV-CUST, PV-RET where applicable.
-8. Return wax to client from lot detail when needed.
-9. Send custody wax to assigned processor/factory through batch `Predare fabrica` page.
-10. Manage operational foundation buffer through `Buffer fabrica`.
-11. Review store movements in `Registru gestiune`.
+- `processing`
+- `lots`
+- `lot_detail`
+- `factory_delivery`
+- `factory_buffer`
+- `processing_register`
 
-## Source Of Truth
+## Core Stock
 
-- `processing_lots` is the lot container.
-- `processing_lot_movements` is the operational movement journal.
-- `inventory_transactions` is the stock ledger.
+- custody wax: `wax_custody`
+- operational foundations: `foundation_operational`
 
-## Stock Types
+## Create Lot
 
-- `wax_custody`
-- `foundation_operational`
+The assigned store is mandatory.
+
+The assigned store processor is mandatory.
+
+The form defaults:
+
+- processor from store
+- processing price from store
+- shrinkage from store
+
+The user may edit price and shrinkage on the lot form, and the backend snapshots those values on the lot.
+
+No fallback to processor defaults should happen if store or form values are missing.
+
+## Exchange / Return
+
+- exchange cannot exceed exchangeable wax
+- exchange cannot make `foundation_operational` negative
+- return cannot exceed wax still in custody
+- exchange documents and financial values use lot snapshot values
+
+## Factory Delivery
+
+- uses processing custody stock only
+- uses selected processor or assigned store processor
+- must not fall back to the first processor in DB
+- sent wax decreases `wax_custody`
+- expected foundation increases `foundation_operational`
+
+## Factory Buffer
+
+- plus increases `foundation_operational`
+- minus decreases `foundation_operational`
+- minus cannot go negative
+- adjustment stores aviz number, aviz date, reception date
+- each adjustment can generate linked `NIR`

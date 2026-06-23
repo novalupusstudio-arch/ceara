@@ -36,11 +36,6 @@ final class App
         return $this->customerService()->userPrimaryStore($userId);
     }
 
-    public function defaultProcessor(): ?array
-    {
-        return $this->customerService()->defaultProcessor();
-    }
-
     public function defaultProcessorForUser(int $userId): ?array
     {
         return $this->customerService()->defaultProcessorForUser($userId);
@@ -85,6 +80,15 @@ final class App
 
     public function factoryDeliveryData(int $processorId): array
     {
+        if ($processorId <= 0) {
+            $store = $this->userPrimaryStore((int) current_user()['id']);
+            $processorId = (int) ($store['processor_id'] ?? 0);
+        }
+
+        if ($processorId <= 0) {
+            throw new RuntimeException('Gestiunea utilizatorului nu are procesator asignat pentru predarea la fabrica.');
+        }
+
         return $this->processingService()->factoryDeliveryData($processorId, fn () => $this->processingService()->processingLotSummaries());
     }
 
@@ -203,11 +207,6 @@ final class App
         $this->purchaseService()->advancePurchaseLot($lotId, $userId);
     }
 
-    public function saveSettings(array $data, int $userId): void
-    {
-        $this->settingsService()->saveSettings($data, $userId);
-    }
-
     public function settings(): array
     {
         return $this->settingsService()->settings();
@@ -245,6 +244,11 @@ final class App
     public function saveDocumentTemplates(array $templates, int $userId): void
     {
         $this->settingsService()->saveDocumentTemplates($templates, $userId);
+    }
+
+    public function saveDocumentSeries(array $seriesRows, int $userId): void
+    {
+        $this->settingsService()->saveDocumentSeries($seriesRows, $userId);
     }
 
     public function companySettings(): array

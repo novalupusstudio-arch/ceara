@@ -14,28 +14,35 @@ final class FgoClient
 
     public function enabled(): bool
     {
-        return !empty($this->config['enabled']);
+        return trim((string) ($this->config['base_url'] ?? '')) !== '' && trim((string) ($this->config['private_key'] ?? '')) !== '';
     }
 
     public function emitInvoice(array $payload, string $clientName): array
     {
         $this->assertConfigured();
 
-        $payload = array_merge([
-            'CodUnic' => (string) $this->config['cod_unic'],
+        $defaults = [
             'Hash' => $this->hashForClient($clientName),
-            'Serie' => (string) $this->config['serie'],
             'Valuta' => 'RON',
             'TipFactura' => 'Factura',
-            'PlatformaUrl' => (string) $this->config['platforma_url'],
-        ], $payload);
+        ];
+        if (trim((string) ($this->config['cod_unic'] ?? '')) !== '') {
+            $defaults['CodUnic'] = (string) $this->config['cod_unic'];
+        }
+        if (trim((string) ($this->config['serie'] ?? '')) !== '') {
+            $defaults['Serie'] = (string) $this->config['serie'];
+        }
+        if (trim((string) ($this->config['platforma_url'] ?? '')) !== '') {
+            $defaults['PlatformaUrl'] = (string) $this->config['platforma_url'];
+        }
 
+        $payload = array_merge($defaults, $payload);
         return $this->post('/factura/emitere', $payload);
     }
 
     private function assertConfigured(): void
     {
-        foreach (['base_url', 'cod_unic', 'private_key', 'platforma_url', 'serie'] as $key) {
+        foreach (['base_url', 'private_key'] as $key) {
             if (trim((string) ($this->config[$key] ?? '')) === '') {
                 throw new RuntimeException('Configurarea FGO este incompleta: lipseste ' . $key . '.');
             }
@@ -44,7 +51,7 @@ final class FgoClient
 
     private function hashForClient(string $clientName): string
     {
-        return strtoupper(sha1((string) $this->config['cod_unic'] . (string) $this->config['private_key'] . $clientName));
+        return strtoupper(sha1((string) ($this->config['cod_unic'] ?? '') . (string) $this->config['private_key'] . $clientName));
     }
 
     private function post(string $path, array $payload): array

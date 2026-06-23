@@ -8,26 +8,34 @@ use RuntimeException;
 
 final class FiscalWireExporter
 {
+    private const LOGICAL_PRINTER = 1;
+    private const ARTICLE_NAME = 'Servicii procesare';
+    private const DEPARTMENT = 1;
+    private const GROUP = 1;
+    private const EXPORT_DIR = '/storage/fiscalwire-out';
+    private const EXTENSION = 'inp';
+    private const VAT_CODE = '1';
+
     public function __construct(private array $config)
     {
     }
 
     public function enabled(): bool
     {
-        return !empty($this->config['enabled']);
+        return true;
     }
 
     public function buildReceipt(array $data): string
     {
-        $printer = (int) ($this->config['logical_printer'] ?? 1);
+        $printer = self::LOGICAL_PRINTER;
         $prefix = ',' . $printer . ',______,_,__;';
         $lines = [];
 
-        $articleName = $this->cleanText((string) ($data['article_name'] ?? $this->config['article_name'] ?? 'Servicii procesare ceara'), 72);
+        $articleName = $this->cleanText((string) ($data['article_name'] ?? self::ARTICLE_NAME), 72);
         $price = $this->money((int) $data['amount_cents']);
         $vat = $this->vatCode();
-        $department = (int) ($this->config['department'] ?? 1);
-        $group = (int) ($this->config['group'] ?? 1);
+        $department = self::DEPARTMENT;
+        $group = self::GROUP;
         $lines[] = 'S' . $prefix . $articleName . ';' . $price . ';1.00;' . $department . ';' . $group . ';' . $vat . ';0;0;';
 
         $paymentType = $data['payment_method'] === 'card' ? 1 : 0;
@@ -38,7 +46,7 @@ final class FiscalWireExporter
 
     public function writeReceipt(string $fileName, string $content): string
     {
-        $dir = (string) ($this->config['export_dir'] ?? '');
+        $dir = dirname(__DIR__, 2) . self::EXPORT_DIR;
         if ($dir === '') {
             throw new RuntimeException('Folderul FiscalWire nu este configurat.');
         }
@@ -56,18 +64,12 @@ final class FiscalWireExporter
 
     public function extension(): string
     {
-        return trim((string) ($this->config['extension'] ?? 'bon'), '.') ?: 'bon';
+        return self::EXTENSION;
     }
 
     private function vatCode(): string
     {
-        $code = trim((string) ($this->config['vat_code'] ?? ''));
-        if ($code !== '') {
-            return $code;
-        }
-
-        $vat = (float) ($this->config['vat_rate'] ?? 21);
-        return rtrim(rtrim(number_format($vat, 2, '.', ''), '0'), '.') . '%';
+        return self::VAT_CODE;
     }
 
     private function money(int $cents): string

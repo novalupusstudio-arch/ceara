@@ -30,11 +30,14 @@ final class ProcessingWriteService
             $customer = $this->customers->resolveProcessingCustomer($data);
             $lotNumber = $this->nextLotNumber('PROC');
             $gross = kg_to_grams($data['gross_kg']);
-            $processor = $this->processingProcessorData((int) $data['processor_id'], (int) $data['store_id']);
-            $shrinkage = (float) str_replace(',', '.', (string) ($data['shrinkage_pct'] ?? $processor['exchange_shrinkage_pct']));
+            $this->processingProcessorData((int) $data['processor_id']);
+            $shrinkage = (float) str_replace(',', '.', (string) ($data['shrinkage_pct'] ?? '0'));
             $processingPriceCents = (int) round(((float) str_replace(',', '.', (string) ($data['processing_price'] ?? '0'))) * 100);
+            if ($shrinkage <= 0) {
+                throw new RuntimeException('Scazamantul lotului este obligatoriu.');
+            }
             if ($processingPriceCents <= 0) {
-                $processingPriceCents = (int) $processor['processing_price_cents'];
+                throw new RuntimeException('Pretul de procesare al lotului este obligatoriu.');
             }
             $foundation = max(0, (int) round($gross * (1 - ($shrinkage / 100))));
             $status = 'In Validare';
@@ -150,6 +153,8 @@ final class ProcessingWriteService
         $type = $data['adjustment_type'] === 'minus' ? 'minus' : 'plus';
         $storeId = (int) ($data['store_id'] ?? 0);
         $avizNumber = trim((string) ($data['aviz_number'] ?? ''));
+        $avizDate = $this->normalizeDate((string) ($data['aviz_date'] ?? '')) ?: date('Y-m-d');
+        $receptionDate = $this->normalizeDate((string) ($data['reception_date'] ?? '')) ?: date('Y-m-d');
         $qty = kg_to_grams((string) ($data['qty_kg'] ?? '0'));
         $notes = trim((string) ($data['notes'] ?? ''));
 
@@ -158,6 +163,12 @@ final class ProcessingWriteService
         }
         if ($avizNumber === '') {
             throw new RuntimeException('Numarul avizului este obligatoriu.');
+        }
+        if ($avizDate === '') {
+            throw new RuntimeException('Data avizului este obligatorie.');
+        }
+        if ($receptionDate === '') {
+            throw new RuntimeException('Data receptiei este obligatorie.');
         }
         if ($qty <= 0) {
             throw new RuntimeException('Cantitatea trebuie sa fie mai mare decat zero.');
@@ -172,10 +183,10 @@ final class ProcessingWriteService
         try {
             $stmt = $this->pdo->prepare(
                 'INSERT INTO factory_buffer_adjustments
-                (adjustment_type, aviz_number, qty_g, store_id, notes, created_by)
-                VALUES (?, ?, ?, ?, ?, ?)'
+                (adjustment_type, aviz_number, aviz_date, reception_date, qty_g, store_id, notes, created_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
             );
-            $stmt->execute([$type, $avizNumber, $qty, $storeId, $notes, $userId]);
+            $stmt->execute([$type, $avizNumber, $avizDate, $receptionDate, $qty, $storeId, $notes, $userId]);
             $adjustmentId = (int) $this->pdo->lastInsertId();
 
             $this->inventory->record(
@@ -468,29 +479,16 @@ final class ProcessingWriteService
         return (int) $this->pdo->lastInsertId();
     }
 
-    private function processingProcessorData(int $processorId, int $storeId = 0): array
+    private function processingProcessorData(int $processorId): void
     {
         if ($processorId <= 0) {
-            return [
-                'id' => null,
-                'processing_price_cents' => 0,
-                'exchange_shrinkage_pct' => 0,
-            ];
+            throw new RuntimeException('Procesatorul lotului este obligatoriu.');
         }
 
         $processor = $this->find('processors', $processorId);
         if (!$processor) {
             throw new RuntimeException('Procesatorul selectat nu exista.');
         }
-        if ($storeId > 0) {
-            $store = $this->find('stores', $storeId);
-            if ($store && (int) ($store['processor_id'] ?? 0) === $processorId) {
-                $processor['processing_price_cents'] = (int) ($store['processing_price_cents'] ?? $processor['processing_price_cents']);
-                $processor['exchange_shrinkage_pct'] = (float) ($store['processing_shrinkage_pct'] ?? $processor['exchange_shrinkage_pct']);
-            }
-        }
-
-        return $processor;
     }
 
     private function recordProcessingLotStatus(int $lotId, string $status, int $userId): void

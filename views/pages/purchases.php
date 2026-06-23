@@ -1,7 +1,7 @@
 <?php
-$settings = $data['company_settings'] ?? [];
-$defaultShrinkage = (string) ($settings['purchase_default_shrinkage_pct'] ?? '0');
-$defaultPrice = number_format(((int) ($settings['purchase_default_price_cents_per_kg'] ?? 0)) / 100, 2, '.', '');
+$assignedStore = $data['assigned_store'] ?? [];
+$defaultShrinkage = (string) ($assignedStore['purchase_shrinkage_pct'] ?? '0');
+$defaultPrice = number_format(((int) ($assignedStore['purchase_price_cents_per_kg'] ?? 0)) / 100, 2, '.', '');
 ?>
 
 <header class="page-header">

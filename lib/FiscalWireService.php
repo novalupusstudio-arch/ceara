@@ -29,7 +29,7 @@ final class FiscalWireService
             throw new RuntimeException('Documentul de bon nu exista.');
         }
 
-        $exporter = new FiscalWireExporter($this->config['fiscalwire'] ?? []);
+        $exporter = new FiscalWireExporter([]);
         if (!$exporter->enabled()) {
             throw new RuntimeException('Integrarea FiscalWire nu este activa.');
         }
@@ -44,7 +44,9 @@ final class FiscalWireService
             throw new RuntimeException('Gestiunea pentru bon nu exista.');
         }
 
-        $fileName = $this->safePathPart(($receiptData['lot_number'] ?? 'lot') . '_' . date('ymdHi')) . '.' . $exporter->extension();
+        $storeCode = strtolower($this->safePathPart((string) ($store['code'] ?? 'gestiune')));
+        $documentNumber = str_pad((string) ((int) ($doc['number'] ?? 0)), 4, '0', STR_PAD_LEFT);
+        $fileName = 'bon_' . $storeCode . '_' . $documentNumber . '_' . date('ymdHis') . '.' . $exporter->extension();
         $relativePath = 'fiscalwire/' . $this->safePathPart((string) ($store['code'] ?? 'gestiune')) . '/' . $fileName;
         $absolutePath = $this->storagePath($relativePath);
         $dir = dirname($absolutePath);
@@ -84,7 +86,7 @@ final class FiscalWireService
         }
 
         return [
-            'article_name' => (string) ($this->config['fiscalwire']['article_name'] ?? 'Servicii procesare'),
+                        'article_name' => 'Servicii procesare',
             'lot_number' => (string) $row['lot_number'],
             'client_name' => (string) $row['customer_name'],
             'client_identifier' => trim((string) ($row['identifier'] ?: ($row['cui'] ?? ''))),

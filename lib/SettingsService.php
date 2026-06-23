@@ -24,51 +24,45 @@ final class SettingsService
     public function settings(): array
     {
         return [
-            'stores' => $this->stores(),
             'processors' => $this->processors(),
+            'stores' => $this->stores(),
             'permissions' => $this->permissions(),
             'role_permissions' => $this->rolePermissions(),
             'users' => $this->users(),
             'user_stores' => $this->userStores(),
             'document_templates' => $this->documentTemplates(),
             'company_settings' => $this->companySettings(),
-            'series' => $this->pdo->query(
-                'SELECT ds.*, s.name AS store_name FROM document_series ds JOIN stores s ON s.id = ds.store_id ORDER BY s.name, ds.document_type'
-            )->fetchAll(),
+            'series' => $this->documentSeries(),
         ];
     }
 
-    public function saveSettings(array $data, int $userId): void
+    public function saveCompanySettings(array $data, int $userId): void
     {
+        $companyName = trim((string) ($data['company_name'] ?? ''));
+        $vatNumber = trim((string) ($data['vat_number'] ?? ''));
+        $registryNumber = trim((string) ($data['registry_number'] ?? ''));
+        $address = trim((string) ($data['address'] ?? ''));
+        $phone = trim((string) ($data['phone'] ?? ''));
+        $email = trim((string) ($data['email'] ?? ''));
+        $fgoUrl = trim((string) ($data['fgo_url'] ?? ''));
+        $fgoToken = trim((string) ($data['fgo_token'] ?? ''));
+
         $this->pdo->beginTransaction();
         try {
-            $this->pdo->prepare('UPDATE stores SET code = ?, name = ?, address = ?, processor_id = ? WHERE id = ?')
-                ->execute([$data['store_code'], $data['store_name'], $data['store_address'], ($data['store_processor_id'] ?? 0) ?: null, $data['store_id']]);
+            $this->pdo->prepare('INSERT INTO company_settings (id) VALUES (1) ON DUPLICATE KEY UPDATE id = id')->execute();
             $this->pdo->prepare(
-                'UPDATE processors SET name = ?, cui = ?, contact = ?, processing_price_cents = ?, exchange_shrinkage_pct = ?, purchase_shrinkage_pct = ? WHERE id = ?'
-            )->execute([
-                $data['processor_name'],
-                $data['processor_cui'],
-                $data['processor_contact'],
-                (int) round(((float) str_replace(',', '.', $data['processing_price'])) * 100),
-                (float) str_replace(',', '.', $data['exchange_shrinkage_pct']),
-                (float) str_replace(',', '.', $data['purchase_shrinkage_pct']),
-                $data['processor_id'],
-            ]);
+                'UPDATE company_settings
+                 SET company_name = ?, vat_number = ?, registry_number = ?, address = ?, phone = ?, email = ?, fgo_url = ?, fgo_token = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
+                 WHERE id = 1'
+            )->execute([$companyName, $vatNumber, $registryNumber, $address, $phone, $email, $fgoUrl, $fgoToken, $userId]);
 
-            foreach ($data['series'] as $id => $series) {
-                $this->pdo->prepare('UPDATE document_series SET series = ?, next_number = ? WHERE id = ?')
-                    ->execute([trim($series['series']), max(1, (int) $series['next_number']), (int) $id]);
-            }
-
-            ($this->logAudit)($userId, 'SETTINGS_UPDATE', 'settings', null, null, 'updated');
+            ($this->logAudit)($userId, 'COMPANY_SETTINGS_UPDATE', 'company_settings', 1, null, $companyName);
             $this->pdo->commit();
         } catch (Throwable $error) {
             $this->pdo->rollBack();
             throw $error;
         }
     }
-
     public function changeOwnPassword(int $userId, string $newPassword, string $confirmPassword): void
     {
         if ($newPassword === '' || strlen($newPassword) < 4) {
@@ -151,9 +145,6 @@ final class SettingsService
         $address = trim($data['address']);
         $processorId = (int) ($data['processor_id'] ?? 0);
         $fgoSeries = strtoupper(trim((string) ($data['fgo_series'] ?? '')));
-        if ($fgoSeries === '' && $code !== '') {
-            $fgoSeries = $this->defaultDocumentSeries('FACT', $code);
-        }
         $processingShrinkage = (float) str_replace(',', '.', (string) ($data['processing_shrinkage_pct'] ?? '0'));
         $processingPriceCents = (int) round(((float) str_replace(',', '.', (string) ($data['processing_price'] ?? '0'))) * 100);
         $purchaseShrinkage = (float) str_replace(',', '.', (string) ($data['purchase_shrinkage_pct'] ?? '0'));
@@ -161,6 +152,9 @@ final class SettingsService
 
         if ($code === '' || $name === '') {
             throw new RuntimeException('Codul si denumirea gestiunii sunt obligatorii.');
+        }
+        if ($fgoSeries === '') {
+            throw new RuntimeException('Seria FGO este obligatorie pentru gestiune.');
         }
         if ($processorId <= 0 || !($this->find)('processors', $processorId)) {
             throw new RuntimeException('Alege procesatorul asignat gestiunii.');
@@ -179,7 +173,7 @@ final class SettingsService
                 $storeId = (int) $this->pdo->lastInsertId();
                 $operation = 'STORE_CREATE';
 
-                foreach (['PV-CUST', 'FACT', 'BON', 'PV-FAG', 'PV-RET', 'AVIZ', 'NIR', 'BORD'] as $type) {
+                foreach (['PV-CUST', 'BON', 'PV-FAG', 'PV-RET', 'AVIZ', 'NIR', 'BORD'] as $type) {
                     $this->pdo->prepare(
                         'INSERT IGNORE INTO document_series (store_id, document_type, series, next_number) VALUES (?, ?, ?, 1)'
                     )->execute([$storeId, $type, $this->defaultDocumentSeries($type, $code)]);
@@ -202,7 +196,6 @@ final class SettingsService
         $address = trim($data['address']);
         $processingPrice = (int) round(((float) str_replace(',', '.', $data['processing_price'])) * 100);
         $exchangeShrinkage = (float) str_replace(',', '.', $data['exchange_shrinkage_pct']);
-        $purchaseShrinkage = (float) str_replace(',', '.', $data['purchase_shrinkage_pct']);
 
         if ($name === '' || $cui === '' || $address === '') {
             throw new RuntimeException('Numele, CUI si adresa procesatorului sunt obligatorii.');
@@ -213,16 +206,16 @@ final class SettingsService
             if ($id > 0) {
                 $this->pdo->prepare(
                     'UPDATE processors
-                     SET name = ?, cui = ?, address = ?, processing_price_cents = ?, exchange_shrinkage_pct = ?, purchase_shrinkage_pct = ?
+                     SET name = ?, cui = ?, address = ?, processing_price_cents = ?, exchange_shrinkage_pct = ?
                      WHERE id = ?'
-                )->execute([$name, $cui, $address, $processingPrice, $exchangeShrinkage, $purchaseShrinkage, $id]);
+                )->execute([$name, $cui, $address, $processingPrice, $exchangeShrinkage, $id]);
                 $processorId = $id;
                 $operation = 'PROCESSOR_UPDATE';
             } else {
                 $this->pdo->prepare(
-                    'INSERT INTO processors (name, cui, address, contact, processing_price_cents, exchange_shrinkage_pct, purchase_shrinkage_pct)
-                     VALUES (?, ?, ?, ?, ?, ?, ?)'
-                )->execute([$name, $cui, $address, '', $processingPrice, $exchangeShrinkage, $purchaseShrinkage]);
+                    'INSERT INTO processors (name, cui, address, processing_price_cents, exchange_shrinkage_pct)
+                     VALUES (?, ?, ?, ?, ?)'
+                )->execute([$name, $cui, $address, $processingPrice, $exchangeShrinkage]);
                 $processorId = (int) $this->pdo->lastInsertId();
                 $operation = 'PROCESSOR_CREATE';
             }
@@ -271,6 +264,40 @@ final class SettingsService
         }
     }
 
+    public function saveDocumentSeries(array $seriesRows, int $userId): void
+    {
+        $allowedTypes = $this->internalDocumentSeriesTypes();
+
+        $this->pdo->beginTransaction();
+        try {
+            foreach ($seriesRows as $id => $series) {
+                $seriesId = (int) $id;
+                $existing = $this->findDocumentSeries($seriesId);
+                if (!$existing) {
+                    continue;
+                }
+                if (!in_array((string) $existing['document_type'], $allowedTypes, true)) {
+                    continue;
+                }
+
+                $seriesValue = strtoupper(trim((string) ($series['series'] ?? '')));
+                $nextNumber = max(1, (int) ($series['next_number'] ?? 1));
+                if ($seriesValue === '') {
+                    throw new RuntimeException('Seria documentului nu poate fi goala.');
+                }
+
+                $this->pdo->prepare('UPDATE document_series SET series = ?, next_number = ? WHERE id = ?')
+                    ->execute([$seriesValue, $nextNumber, $seriesId]);
+            }
+
+            ($this->logAudit)($userId, 'DOCUMENT_SERIES_UPDATE', 'document_series', null, null, 'updated');
+            $this->pdo->commit();
+        } catch (Throwable $error) {
+            $this->pdo->rollBack();
+            throw $error;
+        }
+    }
+
     public function companySettings(): array
     {
         $settings = $this->pdo->query('SELECT * FROM company_settings WHERE id = 1 LIMIT 1')->fetch();
@@ -279,19 +306,12 @@ final class SettingsService
             $settings = $this->pdo->query('SELECT * FROM company_settings WHERE id = 1 LIMIT 1')->fetch();
         }
 
-        return $settings ?: [
-            'company_name' => '',
-            'vat_number' => '',
-            'registry_number' => '',
-            'address' => '',
-            'fgo_private_key' => '',
-            'purchase_default_shrinkage_pct' => 0,
-            'purchase_default_price_cents_per_kg' => 0,
-            'purchase_factory_shrinkage_pct' => 0,
-            'purchase_factory_price_cents_per_kg' => 0,
-        ];
-    }
+        if (!$settings) {
+            throw new RuntimeException('Setarile societatii nu au putut fi initializate.');
+        }
 
+        return $settings;
+    }
     public function permissions(): array
     {
         return $this->pdo->query(
@@ -364,6 +384,22 @@ final class SettingsService
         return $this->pdo->query('SELECT * FROM processors ORDER BY id')->fetchAll();
     }
 
+    public function documentSeries(): array
+    {
+        $allowedTypes = $this->internalDocumentSeriesTypes();
+        $placeholders = implode(',', array_fill(0, count($allowedTypes), '?'));
+        $stmt = $this->pdo->prepare(
+            "SELECT ds.*, s.name AS store_name, s.code AS store_code
+             FROM document_series ds
+             JOIN stores s ON s.id = ds.store_id
+             WHERE ds.document_type IN ($placeholders)
+             ORDER BY s.name, FIELD(ds.document_type, 'PV-CUST', 'PV-FAG', 'PV-RET', 'AVIZ', 'NIR', 'BON', 'BORD')"
+        );
+        $stmt->execute($allowedTypes);
+
+        return $stmt->fetchAll();
+    }
+
     private static function roles(): array
     {
         return ['admin', 'operator'];
@@ -374,5 +410,19 @@ final class SettingsService
         $type = strtoupper(trim($type));
         $code = strtoupper(trim($code));
         return $type . '-' . $code;
+    }
+
+    private function internalDocumentSeriesTypes(): array
+    {
+        return ['PV-CUST', 'PV-FAG', 'PV-RET', 'AVIZ', 'NIR', 'BON', 'BORD'];
+    }
+
+    private function findDocumentSeries(int $id): ?array
+    {
+        $stmt = $this->pdo->prepare('SELECT * FROM document_series WHERE id = ? LIMIT 1');
+        $stmt->execute([$id]);
+        $row = $stmt->fetch();
+
+        return $row ?: null;
     }
 }

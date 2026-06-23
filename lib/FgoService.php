@@ -42,6 +42,7 @@ final class FgoService
         }
 
         $invoiceData = $this->fgoInvoiceData($lotId, $movementId);
+        $invoiceData['payload']['Serie'] = (string) ($doc['series'] ?? '');
         $response = $fgo->emitInvoice($invoiceData['payload'], $invoiceData['client_name']);
         $invoice = is_array($response['Factura'] ?? null) ? $response['Factura'] : [];
         $link = (string) ($invoice['Link'] ?? $response['Link'] ?? '');
@@ -49,8 +50,11 @@ final class FgoService
             throw new RuntimeException('FGO a emis raspuns fara link de factura.');
         }
 
-        $serie = (string) ($invoice['Serie'] ?? $fgoConfig['serie'] ?? $doc['series']);
-        $number = (int) ($invoice['Numar'] ?? $invoice['NrFactura'] ?? $doc['number']);
+        $serie = trim((string) ($invoice['Serie'] ?? ''));
+        $number = (int) ($invoice['Numar'] ?? $invoice['NrFactura'] ?? 0);
+        if ($serie === '' || $number <= 0) {
+            throw new RuntimeException('FGO a raspuns fara seria sau numarul final al facturii.');
+        }
         $notes = 'Factura FGO emisa';
         if (!empty($invoice['LinkPlata'])) {
             $notes .= ' | Link plata: ' . $invoice['LinkPlata'];
@@ -64,14 +68,28 @@ final class FgoService
 
     private function fgoConfig(): array
     {
-        $config = $this->config['fgo'] ?? [];
         $company = ($this->companySettings)();
-        $privateKey = trim((string) ($company['fgo_private_key'] ?? ''));
-        if ($privateKey !== '') {
-            $config['private_key'] = $privateKey;
+        $baseUrl = trim((string) ($company['fgo_url'] ?? ''));
+        $token = trim((string) ($company['fgo_token'] ?? ''));
+        $vatNumber = preg_replace('/\D+/', '', (string) ($company['vat_number'] ?? ''));
+
+        if ($baseUrl === '') {
+            throw new RuntimeException('URL-ul FGO nu este configurat in Date societate.');
+        }
+        if ($token === '') {
+            throw new RuntimeException('Tokenul FGO nu este configurat in Date societate.');
+        }
+        if ($vatNumber === '') {
+            throw new RuntimeException('CUI-ul societatii nu este configurat in Date societate.');
         }
 
-        return $config;
+        return [
+            'enabled' => true,
+            'base_url' => $baseUrl,
+            'private_key' => $token,
+            'cod_unic' => $vatNumber,
+            'platforma_url' => (string) ($_SERVER['HTTP_HOST'] ?? ''),
+        ];
     }
 
     private function fgoInvoiceData(int $lotId, int $movementId): array
@@ -105,9 +123,9 @@ final class FgoService
         $client = [
             'Denumire' => $clientName,
             'Tip' => $clientType,
-            'Tara' => (string) ($this->config['fgo']['default_country'] ?? 'RO'),
-            'Judet' => (string) ($row['county_name'] ?: ($this->config['fgo']['default_county'] ?? 'Bacau')),
-            'Localitate' => (string) ($row['locality_name'] ?: ($this->config['fgo']['default_locality'] ?? 'Onesti')),
+            'Tara' => 'RO',
+            'Judet' => (string) ($row['county_name'] ?: ''),
+            'Localitate' => (string) ($row['locality_name'] ?: ''),
             'Adresa' => (string) ($row['address'] ?? ''),
             'Telefon' => (string) ($row['phone'] ?? ''),
         ];
@@ -115,18 +133,18 @@ final class FgoService
             $client['CodUnic'] = $clientIdentifier;
         }
 
-        $articleName = (string) ($this->config['fgo']['article_name'] ?? 'Servicii procesare ceara');
         return [
             'payload' => [
                 'DataEmitere' => date('Y-m-d'),
                 'IdExtern' => 'ceara-movement-' . $movementId,
+                'Serie' => (string) ($row['series'] ?? ''),
                 'Client' => $client,
                 'Continut' => [[
-                    'Denumire' => $articleName . ' - lot ' . $row['lot_number'],
+                    'Denumire' => 'Servicii procesare ceara - lot ' . $row['lot_number'],
                     'Descriere' => 'Cantitate ceara schimbata: ' . grams_to_kg((int) $row['wax_g']),
                     'NrProduse' => 1,
-                    'UM' => (string) ($this->config['fgo']['article_um'] ?? 'BUC'),
-                    'CotaTVA' => (float) ($this->config['fgo']['vat_rate'] ?? 21),
+                    'UM' => 'BUC',
+                    'CotaTVA' => 21,
                     'PretTotal' => round($serviceValueCents / 100, 2),
                 ]],
                 'Explicatii' => 'Factura generata din aplicatia Ceara pentru lot ' . $row['lot_number'] . '.',

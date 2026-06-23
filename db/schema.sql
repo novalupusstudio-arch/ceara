@@ -48,10 +48,8 @@ CREATE TABLE IF NOT EXISTS processors (
     name VARCHAR(160) NOT NULL,
     cui VARCHAR(40) NOT NULL DEFAULT '',
     address VARCHAR(255) NOT NULL DEFAULT '',
-    contact VARCHAR(160) NOT NULL DEFAULT '',
     processing_price_cents INT NOT NULL DEFAULT 0,
     exchange_shrinkage_pct DECIMAL(6,3) NOT NULL DEFAULT 0,
-    purchase_shrinkage_pct DECIMAL(6,3) NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -204,6 +202,8 @@ CREATE TABLE IF NOT EXISTS factory_buffer_adjustments (
     id INT AUTO_INCREMENT PRIMARY KEY,
     adjustment_type ENUM('plus', 'minus') NOT NULL,
     aviz_number VARCHAR(80) NOT NULL,
+    aviz_date DATE NOT NULL,
+    reception_date DATE NOT NULL,
     qty_g INT NOT NULL,
     store_id INT NOT NULL,
     notes TEXT NULL,
@@ -313,11 +313,10 @@ CREATE TABLE IF NOT EXISTS company_settings (
     vat_number VARCHAR(40) NOT NULL DEFAULT '',
     registry_number VARCHAR(80) NOT NULL DEFAULT '',
     address VARCHAR(255) NOT NULL DEFAULT '',
-    fgo_private_key VARCHAR(255) NOT NULL DEFAULT '',
-    purchase_default_shrinkage_pct DECIMAL(6,3) NOT NULL DEFAULT 0,
-    purchase_default_price_cents_per_kg INT NOT NULL DEFAULT 0,
-    purchase_factory_shrinkage_pct DECIMAL(6,3) NOT NULL DEFAULT 0,
-    purchase_factory_price_cents_per_kg INT NOT NULL DEFAULT 0,
+    phone VARCHAR(80) NOT NULL DEFAULT '',
+    email VARCHAR(120) NOT NULL DEFAULT '',
+    fgo_url VARCHAR(255) NOT NULL DEFAULT '',
+    fgo_token VARCHAR(255) NOT NULL DEFAULT '',
     updated_by INT NULL,
     updated_at TIMESTAMP NULL,
     FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL

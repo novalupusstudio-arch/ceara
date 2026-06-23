@@ -39,7 +39,7 @@ $excludeDirs = @(
 $excludeFiles = @(
     ".env",
     "config\local.php",
-    "config\fgo.local.php",
+
     "config\secrets.php",
     "config\xampp-target.local.txt",
     "composer.phar"

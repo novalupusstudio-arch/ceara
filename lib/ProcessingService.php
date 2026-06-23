@@ -61,7 +61,7 @@ final class ProcessingService
             }
         }
         if (!$selectedProcessor) {
-            $selectedProcessor = $processors[0] ?? null;
+            throw new RuntimeException('Procesatorul selectat pentru predarea la fabrica nu este valid.');
         }
 
         $selectedProcessorId = $selectedProcessor ? (int) $selectedProcessor['id'] : 0;
@@ -133,6 +133,7 @@ final class ProcessingService
         return [
             'stores' => $this->pdo->query('SELECT * FROM stores ORDER BY name')->fetchAll(),
             'current_stock_g' => $this->inventory->sum('foundation_operational'),
+            'today' => date('Y-m-d'),
             'adjustments' => $this->pdo->query(
                 'SELECT a.*, s.name AS store_name, u.username,
                         d.id AS nir_document_id, d.series AS nir_series, d.number AS nir_number, d.document_type AS nir_type

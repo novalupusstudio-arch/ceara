@@ -2,6 +2,7 @@
 $stores = $data['stores'] ?? [];
 $adjustments = $data['adjustments'] ?? [];
 $currentStock = (int) ($data['current_stock_g'] ?? 0);
+$today = (string) ($data['today'] ?? date('Y-m-d'));
 ?>
 
 <header class="page-header">
@@ -41,6 +42,16 @@ $currentStock = (int) ($data['current_stock_g'] ?? 0);
         </label>
 
         <label>
+            Data aviz
+            <input type="date" name="aviz_date" required value="<?= h($today) ?>">
+        </label>
+
+        <label>
+            Data receptiei
+            <input type="date" name="reception_date" required value="<?= h($today) ?>">
+        </label>
+
+        <label>
             Cantitate faguri kg
             <input name="qty_kg" required inputmode="decimal" type="number" min="0.001" step="0.001" placeholder="10.000">
         </label>
@@ -69,7 +80,8 @@ $currentStock = (int) ($data['current_stock_g'] ?? 0);
         <table>
             <thead>
                 <tr>
-                    <th>Data</th>
+                    <th>Data aviz</th>
+                    <th>Data receptie</th>
                     <th>Tip</th>
                     <th>Aviz</th>
                     <th>NIR</th>
@@ -82,7 +94,8 @@ $currentStock = (int) ($data['current_stock_g'] ?? 0);
             <tbody>
                 <?php foreach ($adjustments as $adjustment): ?>
                     <tr>
-                        <td><?= h(date('d.m.Y H:i', strtotime($adjustment['created_at']))) ?></td>
+                        <td><?= h(date('d.m.Y', strtotime((string) $adjustment['aviz_date']))) ?></td>
+                        <td><?= h(date('d.m.Y', strtotime((string) $adjustment['reception_date']))) ?></td>
                         <td><span class="status"><?= h($adjustment['adjustment_type'] === 'plus' ? 'Plus' : 'Minus') ?></span></td>
                         <td><strong><?= h($adjustment['aviz_number']) ?></strong></td>
                         <td>
@@ -102,7 +115,7 @@ $currentStock = (int) ($data['current_stock_g'] ?? 0);
                 <?php endforeach; ?>
                 <?php if (!$adjustments): ?>
                     <tr>
-                        <td colspan="8" class="empty">Nu exista avize de buffer inregistrate.</td>
+                        <td colspan="9" class="empty">Nu exista avize de buffer inregistrate.</td>
                     </tr>
                 <?php endif; ?>
             </tbody>

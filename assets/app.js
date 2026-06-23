@@ -274,7 +274,6 @@ document.addEventListener("DOMContentLoaded", () => {
     return;
   }
 
-  const processors = JSON.parse(form.dataset.processors || "[]");
   const searchInput = form.querySelector("[data-customer-search]");
   const searchLabel = form.querySelector("[data-search-text]");
   const resultsBox = form.querySelector("[data-lookup-results]");
@@ -503,20 +502,6 @@ document.addEventListener("DOMContentLoaded", () => {
     newCustomerButton.textContent = isPJ ? "Preia date ANAF" : "Client nou";
   }
 
-  function selectedProcessorDefaults() {
-    const selectedId = Number(processorSelect.value || 0);
-    return processors.find((item) => item.id === selectedId) || null;
-  }
-
-  function applyProcessorDefaults() {
-    const processor = selectedProcessorDefaults();
-    const cents = processor ? processor.processing_price_cents : 0;
-    const shrinkage = processor ? Number(processor.exchange_shrinkage_pct) : 0;
-    processingPrice.value = (cents / 100).toFixed(2);
-    processingShrinkage.value = shrinkage.toFixed(3);
-    renderProcessorValues();
-  }
-
   function renderProcessorValues() {
     const grossValue = Number(String(grossInput.value || "0").replace(",", "."));
     const priceLei = Number(String(processingPrice.value || "0").replace(",", "."));
@@ -603,7 +588,7 @@ document.addEventListener("DOMContentLoaded", () => {
     input.addEventListener("change", () => switchCustomerMode(input.value));
   });
 
-  processorSelect.addEventListener("change", applyProcessorDefaults);
+  processorSelect.addEventListener("change", renderProcessorValues);
   grossInput.addEventListener("input", renderProcessorValues);
   processingPrice.addEventListener("input", renderProcessorValues);
   processingShrinkage.addEventListener("input", renderProcessorValues);

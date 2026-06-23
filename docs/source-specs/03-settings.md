@@ -1,38 +1,97 @@
 # Settings
 
+## Access Model
+
+Settings are admin-only.
+
+Operators should not configure the app. If configuration is missing, they should only see the operational error and ask admin to fix it.
+
 ## Company Data
 
-- name
+- company name
 - CUI
 - trade registry number
 - address
-- FGO API/private key
+- phone
+- email
+- FGO URL
+- FGO token
 
-## Stores
+These values are stored in `company_settings`.
+
+## Stores / Gestiuni
+
+Each store contains the operational defaults for the business relation with the client:
 
 - short uppercase code, e.g. `BC`, `CJ`
 - name
 - address
 - FGO invoice series
-- default processor
+- assigned processor
 - processing shrinkage %
-- processing price with VAT lei/kg
+- processing price lei/kg
 - purchase shrinkage %
-- purchase price with VAT lei/kg
+- purchase price lei/kg
+
+The store is the source of defaults for:
+
+- new processing lots
+- new purchase lots
+
+If required store configuration is missing, the app should fail clearly instead of silently falling back.
 
 ## Processors
+
+Each processor contains the business relation with the factory/processor:
 
 - name
 - CUI
 - address
-- contact
-- identity/master data
+- processing price lei/kg in relation with processor
+- processor shrinkage %
 
-Operational commercial defaults are stored on the store/gestiune. Processor fields are not the final source for lot calculations once store values exist.
+Processor fields are not the source of client-facing lot values once store values exist. Lot snapshots are the final source after creation.
 
 ## Document Series
 
-- per store/gestiune and document type
-- default series format `<DOCUMENT_TYPE>-<STORE_CODE>`
-- independent increasing counter per store + document type
-- displayed number is padded to four digits, e.g. `PV-CUST-BC-0001`
+Internal generated documents are numbered per store + document type.
+
+- format example: `PV-CUST-BC`
+- counter example: `0001`
+- stored in `document_series`
+
+Current internal managed types:
+
+- `PV-CUST`
+- `PV-FAG`
+- `PV-RET`
+- `AVIZ`
+- `NIR`
+- `BON`
+- `BORD`
+
+`FACT` is special:
+
+- FGO series is configured per store in `stores.fgo_series`
+- it maps to an existing FGO-side series
+
+## Document Templates
+
+Editable HTML templates are managed in settings and used to generate PDFs.
+
+Generated PDFs are saved under:
+
+- `storage/documents/<store_code>/`
+
+## No-Fallback Direction
+
+Critical configuration should not silently invent values.
+
+This applies to:
+
+- DB connection
+- assigned store processor
+- processing form defaults
+- internal document series
+- FGO URL/token/CUI
+- store FGO series

@@ -1,33 +1,42 @@
-﻿# Flow Purchase Wax
+# Purchase Flow
 
-## Supplier Types
+## Pages
 
-- PF
-- Producator agricol
-- PJ/PFA
+- `purchases`
+- `purchase_exit`
+- `purchase_register`
 
-## Entry Flow
+## Core Stock
 
-1. Select `Achizitie ceara` from dashboard.
-2. Open `Achizitie ceara` page.
-3. Choose supplier type.
-4. Enter supplier identity and SIRUTA location.
-5. Enter external document reference:
-   - PF: borderou-like series/number/position
-   - Producator agricol: carnet-like series/number/position
-   - PJ/PFA: invoice series/number/date
-6. Enter purchase date, gross kg, shrinkage and price with VAT. Shrinkage and price are defaulted from the assigned store/gestiune and can be edited for the purchase.
-7. Save purchase lot.
-8. App adds positive `wax_purchased` stock only.
+- purchased wax: `wax_purchased`
 
-No internal purchase PDF is generated. External paper/accounting documents are referenced only.
+This stock must remain separate from:
 
-Purchase lot stores its effective commercial values (`shrinkage_pct`, `purchase_price_cents_per_kg`) so later reports keep the original transaction values even if store defaults change.
+- `wax_custody`
 
-## Exit Flow
+## Create Purchase Lot
 
-Page `Iesire ceara` records purchased wax leaving stock by partner/factory and external document. It writes negative `wax_purchased` and cannot exceed stock.
+Supplier types:
 
-## Register
+- `PF`
+- `Producator agricol`
+- `PJ/PFA`
 
-Page `Registru achizitie` shows current purchased wax stock, opening/closing balances, movements and lot list.
+Store defaults:
+
+- `purchase_shrinkage_pct`
+- `purchase_price_cents_per_kg`
+
+These defaults are editable per purchase, then snapshotted on the lot.
+
+The app stores external document references only. It does not generate internal PDF documents for purchase entry.
+
+## Purchase Exit
+
+- creates stock-level negative movement on `wax_purchased`
+- cannot exceed current purchased stock
+- stores external document references only
+
+## Current Scope
+
+Purchase exits are not allocated to specific lots yet.

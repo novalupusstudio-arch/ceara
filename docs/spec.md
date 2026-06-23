@@ -1,74 +1,48 @@
-﻿# Project Spec
+# Project Spec
 
 ## Objective
 
-Build and maintain a local-first PHP/MySQL application for wax operations with two independent operational flows:
+Maintain a local-first PHP/MySQL application for two separate wax flows:
 
-1. Processing customer wax held in custody.
-2. Purchasing wax into company-owned inventory.
+1. processing customer wax held in custody
+2. purchasing company-owned wax
 
-The application must preserve traceability and never mix custody wax with purchased wax.
+The app must preserve stock traceability and never mix custody wax with purchased wax.
 
 ## Core Principles
 
-- Quantities are stored as integer grams.
-- UI displays kg with three decimals.
-- Operational stock movements are append-only in `inventory_transactions`.
-- Audit-sensitive actions are logged in `audit_log`.
-- Users operate in their assigned store/gestiune.
-- Processing stock and purchase stock are separate.
-- External paper/accounting documents are referenced when the app does not generate documents.
-- Refactoring should keep business behavior unchanged and move code out of large files in small committed steps.
-
-## Code Organization Direction
-
-New PHP classes should use the `Ceara\` namespace and live under `lib/`, loaded by `lib/autoload.php`.
-
-Current module folders:
-
-- `Ceara\Integrations` for external systems.
-- `Ceara\Http` for request and action dispatchers.
-- `Ceara\Documents` for document issuing, generated files, PDF/template rendering and variable building.
-- `Ceara\Inventory` for inventory ledger writing, balances and register row queries.
-
-Temporary legacy facade:
-
-- `App.php` still coordinates many flows while services are extracted.
-- `index.php` still owns routing and POST action dispatch until controller/action handlers are introduced.
+- quantities are stored as integer grams
+- UI displays kg with three decimals
+- inventory movements are append-only
+- critical settings should not silently fall back
+- settings are configured by admin only
+- operators should see operational errors and ask admin for fixes
 
 ## Roles
-
-Seeded local admin:
-
-- user: `admin`
-- password: `admin`
-
-Production SQL seed admin:
-
-- user: `admin`
-- password: `CearaAdmin!2026`
 
 Roles:
 
 - `admin`
 - `operator`
 
-Main permissions:
+Local seed login:
 
-- user management
-- store management
-- processor management
-- document template management
-- processing creation/actions
-- purchase creation/actions
-- reports
-- audit
+- user: `admin`
+- password: `admin`
 
-## Dashboard And Navigation
+Production reset seed login:
 
-The app starts with no active business flow.
+- user: `admin`
+- password: `CearaAdmin!2026`
 
-General sidebar:
+## Dashboard And Flow Selection
+
+Dashboard exposes two flows:
+
+- `Schimb de ceara`
+- `Achizitie ceara`
+
+General navigation:
 
 - Dashboard
 - Documente
@@ -76,12 +50,7 @@ General sidebar:
 - Setari
 - Audit
 
-Dashboard flow buttons:
-
-- `Schimb de ceara`
-- `Achizitie ceara`
-
-When processing is selected, sidebar adds:
+Processing navigation:
 
 - Procesare ceara
 - Loturi ceara
@@ -89,76 +58,94 @@ When processing is selected, sidebar adds:
 - Buffer fabrica
 - Registru gestiune
 
-When purchase is selected, sidebar adds:
+Purchase navigation:
 
 - Achizitie ceara
 - Iesire ceara
 - Registru achizitie
 
-## Processing Flow Specification
+## Processing Flow
 
 ### Create Processing Lot
 
 Inputs:
 
-- customer type PF/PJ
-- existing customer search or new customer
-- PF: name, phone, CNP/CI, county, locality, address
-- PJ: name, CUI, phone, representative, county, locality, address
-- processor preselected from user's assigned store
+- PF/PJ customer data
+- processor
 - gross wax kg
-- processing price / shrinkage defaulted from the assigned store/processor and editable for this lot
+- processing price
+- shrinkage
 
-Actions:
+Default source:
+
+- processor is taken from assigned store
+- price and shrinkage are taken from assigned store
+- user can still edit the lot values in the form
+
+Strict rules:
+
+- assigned store is required
+- assigned store processor is required
+- lot processing price is required
+- lot shrinkage is required
+- backend no longer falls back to processor values if the form is incomplete
+
+Save behavior:
 
 - create `processing_lots`
-- snapshot `processing_price_cents` and `shrinkage_pct` on the lot
-- create `processing_lot_movements.RECEIVE_WAX_FROM_CLIENT`
-- add `inventory_transactions.wax_custody` positive movement
-- create linked `PV-CUST` document row
+- snapshot `processing_price_cents` and `shrinkage_pct`
+- create `RECEIVE_WAX_FROM_CLIENT`
+- increase `wax_custody`
+- issue `PV-CUST`
 
 ### Lot Detail
 
 Shows:
 
-- current calculated stock/balance values
+- calculated balances
 - movement journal
-- document buttons per movement
-- exchange wax action
-- return wax action
+- generated documents
 
-Exchange:
+Actions:
 
-- cannot exceed wax available for exchange
-- calculates foundations from the lot's saved shrinkage
-- calculates service value from the lot's saved processing price
-- cannot make `foundation_operational` negative
-- writes movement and negative foundation stock
-- can generate FGO invoice, FiscalWire receipt, PV-FAG
+- exchange wax with client
+- return wax to client
 
-Return:
+Rules:
 
-- cannot exceed custody wax
-- writes movement and negative custody stock
-- can generate PV-RET
+- exchange cannot exceed exchangeable wax
+- exchange cannot make `foundation_operational` negative
+- service value uses lot snapshot price
+- foundation quantity uses lot snapshot shrinkage
+- return cannot exceed wax still in custody
 
 ### Factory Delivery
 
-- Dedicated batch page.
-- Uses only processing custody stock.
-- Lists lots with wax still in custody for selected/assigned processor.
-- Operator edits sent quantity and rejected quantity.
-- Sum per lot cannot exceed custody remaining.
-- Sent wax decreases `wax_custody`.
-- Calculated foundations increase `foundation_operational`.
-- Rejected factory wax is recorded as movement.
+- only for processing stock
+- uses the selected or assigned processor
+- no fallback to the first processor in DB
+- if no valid processor exists, screen must fail with clear error
+- sent wax decreases `wax_custody`
+- expected foundation increases `foundation_operational`
 
 ### Factory Buffer
 
-- Adjusts `foundation_operational` directly by external aviz.
-- Plus increases stock.
-- Minus decreases stock and cannot go negative.
-- Each buffer adjustment creates linked NIR record.
+- adjusts `foundation_operational` by external aviz
+- `plus` increases stock
+- `minus` decreases stock and cannot go negative
+- each adjustment issues linked `NIR`
+
+Buffer adjustment fields:
+
+- adjustment type
+- aviz number
+- aviz date
+- reception date
+- quantity
+- store
+- notes
+
+Both dates default to today in UI.
 
 ### Processing Register
 
@@ -171,268 +158,173 @@ Filters:
 
 Shows:
 
-- current stock totals
+- current totals
 - opening balance
 - closing balance
 - partner
-- lot link where applicable
-- document link where applicable
+- lot link
+- document link
 - date
 - signed wax custody quantity
 - signed foundation quantity
 - operator
 
-## Purchase Flow Specification
+## Purchase Flow
 
-Purchase is fully separate from processing.
-
-### Purchase Stock
-
-Use inventory movement type:
+Purchase stock:
 
 - `wax_purchased`
 
-Do not use:
+Must never use:
 
 - `wax_custody`
-- processing factory delivery
-- processing processor assignment rules
 
-### Create Purchase Lot Page
+### Purchase Entry
 
-Page: `purchases` / `Achizitie ceara`.
+Supplier types:
 
-This page only creates new purchase lots. It does not list lots.
+- `PF`
+- `Producator agricol`
+- `PJ/PFA`
 
-Supplier type radio:
+Store defaults:
 
-- PF
-- Producator agricol
-- PJ/PFA
+- purchase shrinkage
+- purchase price with VAT
 
-Common supplier fields:
-
-- name
-- phone
-- county
-- locality
-- address
-
-PF / Producator agricol:
-
-- CNP/CI identifier
-- document series
-- document number
-- document position
-
-PJ/PFA:
-
-- CUI
-- invoice series
-- invoice number
-- invoice date
-
-Purchase fields:
-
-- purchase date
-- gross kg
-- shrinkage %, defaulted from the assigned store and editable for the purchase
-- price with VAT lei/kg, defaulted from the assigned store and editable for the purchase
-- calculated total
-- calculated net kg
-- assigned store display
+These defaults come from `stores`.
 
 Save behavior:
 
-- create/update supplier by type + name/identifier or CUI
+- create/update supplier
 - create `purchase_lots`
-- add positive `inventory_transactions.wax_purchased`
-- do not create internal document/PDF records
+- add positive `wax_purchased`
+- do not generate internal PDF
 
-Validation:
-
-- gross quantity > 0
-- PF/producator identifier required
-- PJ/PFA CUI required
-- document series + number required
-- document position required for PF/producator
-- invoice date required for PJ/PFA
-- external document type + series + number + position unique
-
-### Purchase Exit Page
-
-Page: `purchase_exit` / `Iesire ceara`.
-
-Purpose: record wax leaving purchased stock toward factory/partner/customer by external document.
+### Purchase Exit
 
 Fields:
 
-- partner/factory name
-- partner identifier/CUI
-- quantity kg
-- document type
-- document series
-- document number
-- document date
+- partner/factory
+- identifier/CUI
+- quantity
+- external document type/series/number/date
 - notes
 
 Save behavior:
 
 - create `purchase_wax_exits`
-- write negative `inventory_transactions.wax_purchased`
-- cannot exceed current purchased wax stock
-- no PDF generated
+- add negative `wax_purchased`
+- cannot exceed purchased stock
 
-Current implementation is stock-level exit only, not allocated to specific purchase lots.
+## Documents
 
-### Purchase Register Page
+Internal generated document counters live in:
 
-Page: `purchase_register` / `Registru achizitie`.
+- `document_series`
 
-Filters:
+Current managed internal types:
 
-- date start
-- date end
+- `PV-CUST`
+- `PV-FAG`
+- `PV-RET`
+- `AVIZ`
+- `NIR`
+- `BON`
+- `BORD`
 
-Shows:
+FGO invoice series is mapped from:
 
-- current purchased wax stock
-- opening period balance
-- closing period balance
-- movement table: partner, document, position, date, signed wax quantity, operator, notes
-- lot list below register
+- `stores.fgo_series`
 
-## Location / SIRUTA
+Strict rules:
 
-`release/siruta.csv` is committed and seeded at startup into:
+- missing internal document series => runtime error
+- missing store FGO series => runtime error
+- missing FGO URL/token/CUI => runtime error
+- invalid FGO response without final series/number => runtime error
 
-- `siruta_counties`
-- `siruta_localities`
-
-Forms use county/locality combos. Duplicate locality names within one county include parent context.
-
-PJ/PFA customer lookup for processing can use online ANAF demo endpoint. Purchase PJ/PFA lookup is not implemented yet.
-
-## Documents And Templates
-
-Editable templates live in `document_templates` and are managed in settings.
-
-Versioned template source currently includes:
-
-- `lib/templates/pv-cust.html`
-
-Generated PDFs are stored in ignored runtime folder:
+PDF storage:
 
 - `storage/documents/<store_code>/`
 
-`PV-CUST` is a compact A4 table template with GDPR notice.
+FiscalWire storage:
 
-Future templates/documents may need refinement:
+- `storage/fiscalwire-out/`
 
-- PV-FAG
-- PV-RET
-- AVIZ
-- NIR
+FiscalWire current hardcoded operational values:
 
-## FGO
-
-FGO invoice generation is used for processing service invoices.
-
-Config:
-
-- `config/config.php` defaults
-- optional ignored `config/fgo.local.php`
-- `company_settings.fgo_private_key` overrides private key if filled
-- invoice series is read from the active store/gestiune (`stores.fgo_series`); if blank, the app may fall back to `FACT-<store_code>`
-
-FGO response external invoice link is saved in document row.
-
-## FiscalWire
-
-FiscalWire creates `.inp` files for cash register.
-
-Rules:
-
-- only `S` and `T` lines
-- VAT 21 uses fiscal code `1`
-- cash payment `0`
-- card payment `1`
-- item name: `Servicii procesare`
-- generated file downloads directly from browser
-- file name: `<LOT_NUMBER>_<YYmmddHHmm>.inp`
+- article name `Servicii procesare`
+- VAT code `1`
+- extension `.inp`
 
 ## Settings
 
-`Setari > Date societate`:
+### Company
 
 - company name
 - CUI
 - registry number
 - address
-- FGO API key
+- phone
+- email
+- FGO URL
+- FGO token
 
-Other settings:
+### Stores
 
-- roles and permissions
-- users
-- stores/gestiuni: uppercase code, name, address, FGO series, assigned processor, processing terms, purchase terms
-- processors
-- document templates
+- code
+- name
+- address
+- FGO series
+- assigned processor
+- processing shrinkage %
+- processing price lei/kg
+- purchase shrinkage %
+- purchase price lei/kg
 
-Store/gestiune commercial fields are saved in SQL and are the source of defaults for new operations:
+### Processors
 
-- `processing_shrinkage_pct`
-- `processing_price_cents`
-- `purchase_shrinkage_pct`
-- `purchase_price_cents_per_kg`
+Active processor fields:
 
-Processing lots and purchase lots save their own effective values at creation time. Reports and generated documents should use the saved lot values, not later changes to the store defaults.
+- name
+- CUI
+- address
+- processing price lei/kg in relation with processor
+- processor shrinkage %
 
-## Document Series
+Removed dead processor/company legacy fields should no longer be reused.
 
-Document numbering is scoped by store/gestiune and document type.
+## Local Runtime
 
-- Store code should be short uppercase, for example `BC` or `CJ`.
-- Default series format is `<DOCUMENT_TYPE>-<STORE_CODE>`, for example `PV-CUST-BC`.
-- Each `store_id + document_type` has its own counter in `document_series`.
-- Numbering starts at `0001` and increments by one.
-- Main document types: `PV-CUST`, `PV-FAG`, `PV-RET`, `AVIZ`, `NIR`, `FACT`, `BON`, `BORD`.
+Required local DB config:
+
+- ignored `config/local.php`, or
+- env vars `CEARA_DB_*`
+
+Required local sync target file:
+
+- ignored `config/xampp-target.local.txt`
+
+Startup no longer auto-creates default stores/processors.
 
 ## Deployment
 
-Local:
+### Local
 
 - use `scripts/sync-to-xampp.ps1`
-- `config/xampp-target.local.txt` is local/ignored
 
-Production:
+### Production
 
-- SQL seed: `deploy/sql/init-production.sql`
-- build script: `scripts/build-production-zip.ps1`
-- production config template: `deploy/production-config.template.php`
-- local production config: `deploy/local/config.php`, ignored
+Current expected production deployment mode:
 
-Do not generate production zip unless the user explicitly asks.
+1. delete all old files from app folder
+2. extract fresh full archive
+3. run full reset SQL on selected DB
+4. open app and configure admin-side settings
 
-## Open / Next Work
+Main files:
 
-High priority:
-
-- Manual test full purchase flow after latest implementation.
-- Manual test purchase exit with over-stock validation.
-- Manual test processing exchange error redirects and real FiscalWire download.
-- Consider app version bump to force JS/CSS cache refresh.
-
-Medium priority:
-
-- Add ANAF lookup to purchase PJ/PFA suppliers.
-- Add purchase register filters for supplier type/document/operator.
-- Decide whether purchase exits should consume specific lots FIFO/manual allocation.
-- Add detail page for purchase lots.
-- Add factory/partner directory for purchase exits.
-
-Production readiness:
-
-- Build fresh production zip only when requested.
-- Re-test init SQL after any schema change.
-- Configure production DB and initial admin password change.
+- `deploy/sql/init-production.sql`
+- `deploy/DEPLOY_PRODUCTION.md`
+- release zip in `deploy/output/`

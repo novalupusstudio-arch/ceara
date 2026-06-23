@@ -170,28 +170,24 @@ final class CustomerService
         return $store ?: null;
     }
 
-    public function defaultProcessor(): ?array
-    {
-        $stmt = $this->pdo->query('SELECT * FROM processors ORDER BY id LIMIT 1');
-        $processor = $stmt->fetch();
-        return $processor ?: null;
-    }
-
     public function defaultProcessorForUser(int $userId): ?array
     {
         $store = $this->userPrimaryStore($userId);
-        $processorId = (int) ($store['processor_id'] ?? 0);
-        if ($processorId > 0) {
-            $processor = ($this->find)('processors', $processorId);
-            if ($processor) {
-                $processor['processing_price_cents'] = (int) ($store['processing_price_cents'] ?? $processor['processing_price_cents']);
-                $processor['exchange_shrinkage_pct'] = (float) ($store['processing_shrinkage_pct'] ?? $processor['exchange_shrinkage_pct']);
-                $processor['purchase_shrinkage_pct'] = (float) ($store['purchase_shrinkage_pct'] ?? $processor['purchase_shrinkage_pct']);
-                return $processor;
-            }
+        if (!$store) {
+            throw new RuntimeException('Utilizatorul nu are o gestiune alocata.');
         }
 
-        return $this->defaultProcessor();
+        $processorId = (int) ($store['processor_id'] ?? 0);
+        if ($processorId <= 0) {
+            throw new RuntimeException('Gestiunea utilizatorului nu are procesator asignat.');
+        }
+
+        $processor = ($this->find)('processors', $processorId);
+        if (!$processor) {
+            throw new RuntimeException('Procesatorul asignat gestiunii nu exista.');
+        }
+
+        return $processor;
     }
 
     public function resolveProcessingCustomer(array $data): array
