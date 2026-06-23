@@ -138,6 +138,8 @@ Processing stock types:
 - Factory delivery is per assigned processor/store and cannot exceed custody stock.
 - Buffer minus cannot make operational foundation stock negative.
 - Each store has one assigned processor for processing.
+- Processing commercial defaults are stored on the assigned store/gestiune: processing shrinkage %, processing price, purchase shrinkage % and purchase price.
+- New processing lots snapshot their actual processing price and shrinkage. Lot detail, exchange calculations, invoices, receipts and PV values must use the lot snapshot even if store defaults change later.
 
 ## Purchase Flow
 
@@ -172,8 +174,8 @@ Common:
 - county/locality/address
 - purchase date
 - gross kg
-- shrinkage %
-- price with VAT lei/kg
+- shrinkage %, defaulted from the assigned store and editable for the purchase
+- price with VAT lei/kg, defaulted from the assigned store and editable for the purchase
 - total calculated
 - net estimated quantity
 
@@ -243,15 +245,11 @@ Company settings include:
 - registry number
 - address
 - FGO API/private key override
-- default purchase shrinkage %
-- default purchase price with VAT lei/kg
-- purchase factory shrinkage %
-- purchase factory price with VAT lei/kg
 
 Admin/settings also manage:
 
 - users
-- stores
+- stores/gestiuni: code, name, address, FGO series, assigned processor, processing terms, purchase terms
 - processors
 - roles/permissions
 - document templates
@@ -284,6 +282,18 @@ Important tables:
 - `audit_log`
 
 Quantities are stored as integer grams. UI displays kilograms with three decimals and Romanian decimal comma where helpers are used.
+
+Store-level operational settings are stored in `stores`:
+
+- `code`
+- `fgo_series`
+- `processor_id`
+- `processing_shrinkage_pct`
+- `processing_price_cents`
+- `purchase_shrinkage_pct`
+- `purchase_price_cents_per_kg`
+
+Generated document counters are stored in `document_series` per `store_id + document_type`. Default series format is `<DOCUMENT_TYPE>-<STORE_CODE>` and displayed numbers use four digits, for example `PV-CUST-BC-0001`.
 
 ## Production
 

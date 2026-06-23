@@ -41,7 +41,10 @@ $excludeFiles = @(
     "config\local.php",
     "config\fgo.local.php",
     "config\secrets.php",
-    "config\xampp-target.local.txt"
+    "config\xampp-target.local.txt",
+    "composer.phar",
+    "db\ceara-current.xml",
+    "db\ceara-reset.sql"
 )
 
 function Test-IsExcluded {

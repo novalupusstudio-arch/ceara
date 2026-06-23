@@ -91,22 +91,6 @@ foreach ($data['stores'] as $store) {
                 API key FGO
                 <input type="password" name="fgo_private_key" autocomplete="off" value="<?= h((string) ($company['fgo_private_key'] ?? '')) ?>">
             </label>
-            <label>
-                Scazamant achizitie %
-                <input name="purchase_default_shrinkage_pct" inputmode="decimal" value="<?= h((string) ($company['purchase_default_shrinkage_pct'] ?? '0')) ?>">
-            </label>
-            <label>
-                Pret achizitie cu TVA lei/kg
-                <input name="purchase_default_price" inputmode="decimal" value="<?= h(number_format(((int) ($company['purchase_default_price_cents_per_kg'] ?? 0)) / 100, 2, '.', '')) ?>">
-            </label>
-            <label>
-                Scazamant fabrica achizitie %
-                <input name="purchase_factory_shrinkage_pct" inputmode="decimal" value="<?= h((string) ($company['purchase_factory_shrinkage_pct'] ?? '0')) ?>">
-            </label>
-            <label>
-                Pret fabrica cu TVA lei/kg
-                <input name="purchase_factory_price" inputmode="decimal" value="<?= h(number_format(((int) ($company['purchase_factory_price_cents_per_kg'] ?? 0)) / 100, 2, '.', '')) ?>">
-            </label>
             <button class="primary" type="submit">Salveaza datele societatii</button>
         </form>
     </section>
@@ -276,8 +260,9 @@ foreach ($data['stores'] as $store) {
         <form method="post" class="form-grid">
             <input type="hidden" name="action" value="save_store">
             <input type="hidden" name="store_id" value="0">
-            <label>Cod <input name="store_code" required placeholder="GEST2"></label>
+            <label title="Alege un cod scurt, de preferat 2 litere uppercase, ex. BC, CJ, IS.">Cod <input name="store_code" required placeholder="BC" maxlength="8" pattern="[A-Z0-9_-]+" title="Cod scurt pentru serii, de preferat 2 litere uppercase: BC, CJ, IS."></label>
             <label>Denumire <input name="store_name" required placeholder="Magazin nou"></label>
+            <label>Seria FGO <input name="store_fgo_series" placeholder="FACT-BC"></label>
             <label>
                 Procesator asignat
                 <select name="store_processor_id" required>
@@ -287,6 +272,10 @@ foreach ($data['stores'] as $store) {
                 </select>
             </label>
             <label class="wide">Adresa <input name="store_address"></label>
+            <label>Scazamant procesare % <input name="store_processing_shrinkage_pct" inputmode="decimal" value="0"></label>
+            <label>Pret procesare lei/kg <input name="store_processing_price" inputmode="decimal" value="0.00"></label>
+            <label>Scazamant achizitie % <input name="store_purchase_shrinkage_pct" inputmode="decimal" value="0"></label>
+            <label>Pret achizitie lei/kg <input name="store_purchase_price" inputmode="decimal" value="0.00"></label>
             <button class="primary" type="submit">Adauga gestiune</button>
         </form>
     </section>
@@ -298,9 +287,14 @@ foreach ($data['stores'] as $store) {
                 <form method="post" class="store-row">
                     <input type="hidden" name="action" value="save_store">
                     <input type="hidden" name="store_id" value="<?= h((string) $store['id']) ?>">
-                    <label>Cod <input name="store_code" value="<?= h($store['code']) ?>" required></label>
+                    <label title="Alege un cod scurt, de preferat 2 litere uppercase, ex. BC, CJ, IS.">Cod <input name="store_code" value="<?= h($store['code']) ?>" required maxlength="8" pattern="[A-Z0-9_-]+" title="Cod scurt pentru serii, de preferat 2 litere uppercase: BC, CJ, IS."></label>
                     <label>Denumire <input name="store_name" value="<?= h($store['name']) ?>" required></label>
+                    <label>Seria FGO <input name="store_fgo_series" value="<?= h((string) ($store['fgo_series'] ?? '')) ?>"></label>
                     <label>Adresa <input name="store_address" value="<?= h($store['address']) ?>"></label>
+                    <label>Scazamant procesare % <input name="store_processing_shrinkage_pct" inputmode="decimal" value="<?= h((string) ($store['processing_shrinkage_pct'] ?? '0')) ?>"></label>
+                    <label>Pret procesare lei/kg <input name="store_processing_price" inputmode="decimal" value="<?= h(number_format(((int) ($store['processing_price_cents'] ?? 0)) / 100, 2, '.', '')) ?>"></label>
+                    <label>Scazamant achizitie % <input name="store_purchase_shrinkage_pct" inputmode="decimal" value="<?= h((string) ($store['purchase_shrinkage_pct'] ?? '0')) ?>"></label>
+                    <label>Pret achizitie lei/kg <input name="store_purchase_price" inputmode="decimal" value="<?= h(number_format(((int) ($store['purchase_price_cents_per_kg'] ?? 0)) / 100, 2, '.', '')) ?>"></label>
                     <label>
                         Procesator
                         <select name="store_processor_id" required>

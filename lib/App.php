@@ -153,6 +153,9 @@ final class App
         if ($processorId > 0) {
             $processor = $this->find('processors', $processorId);
             if ($processor) {
+                $processor['processing_price_cents'] = (int) ($store['processing_price_cents'] ?? $processor['processing_price_cents']);
+                $processor['exchange_shrinkage_pct'] = (float) ($store['processing_shrinkage_pct'] ?? $processor['exchange_shrinkage_pct']);
+                $processor['purchase_shrinkage_pct'] = (float) ($store['purchase_shrinkage_pct'] ?? $processor['purchase_shrinkage_pct']);
                 return $processor;
             }
         }
@@ -535,9 +538,12 @@ final class App
             $customer = $this->resolveProcessingCustomer($data);
             $lotNumber = $this->nextLotNumber('PROC');
             $gross = kg_to_grams($data['gross_kg']);
-            $processor = $this->processingProcessorData((int) $data['processor_id']);
-            $shrinkage = (float) $processor['exchange_shrinkage_pct'];
-            $processingPriceCents = (int) $processor['processing_price_cents'];
+            $processor = $this->processingProcessorData((int) $data['processor_id'], (int) $data['store_id']);
+            $shrinkage = (float) str_replace(',', '.', (string) ($data['shrinkage_pct'] ?? $processor['exchange_shrinkage_pct']));
+            $processingPriceCents = (int) round(((float) str_replace(',', '.', (string) ($data['processing_price'] ?? '0'))) * 100);
+            if ($processingPriceCents <= 0) {
+                $processingPriceCents = (int) $processor['processing_price_cents'];
+            }
             $foundation = max(0, (int) round($gross * (1 - ($shrinkage / 100))));
             $status = 'In Validare';
 
@@ -909,7 +915,7 @@ final class App
             return;
         }
 
-        $fgoConfig = $this->fgoConfig();
+        $fgoConfig = $this->fgoConfig((int) $doc['store_id']);
         $fgo = new FgoClient($fgoConfig);
         if (!$fgo->enabled()) {
             throw new RuntimeException('Integrarea FGO nu este activa.');
@@ -939,7 +945,7 @@ final class App
         $this->logAudit($userId, 'FGO_INVOICE_CREATE', 'documents', $documentId, null, $serie . '-' . $number);
     }
 
-    private function fgoConfig(): array
+    private function fgoConfig(?int $storeId = null): array
     {
         $config = $this->config['fgo'] ?? [];
         $company = $this->companySettings();
@@ -1308,10 +1314,18 @@ final class App
     public function saveStore(array $data, int $userId): void
     {
         $id = (int) ($data['id'] ?? 0);
-        $code = trim($data['code']);
+        $code = strtoupper(trim((string) $data['code']));
         $name = trim($data['name']);
         $address = trim($data['address']);
         $processorId = (int) ($data['processor_id'] ?? 0);
+        $fgoSeries = strtoupper(trim((string) ($data['fgo_series'] ?? '')));
+        if ($fgoSeries === '' && $code !== '') {
+            $fgoSeries = $this->defaultDocumentSeries('FACT', $code);
+        }
+        $processingShrinkage = (float) str_replace(',', '.', (string) ($data['processing_shrinkage_pct'] ?? '0'));
+        $processingPriceCents = (int) round(((float) str_replace(',', '.', (string) ($data['processing_price'] ?? '0'))) * 100);
+        $purchaseShrinkage = (float) str_replace(',', '.', (string) ($data['purchase_shrinkage_pct'] ?? '0'));
+        $purchasePriceCents = (int) round(((float) str_replace(',', '.', (string) ($data['purchase_price'] ?? '0'))) * 100);
 
         if ($code === '' || $name === '') {
             throw new RuntimeException('Codul si denumirea gestiunii sunt obligatorii.');
@@ -1323,20 +1337,20 @@ final class App
         $this->pdo->beginTransaction();
         try {
             if ($id > 0) {
-                $this->pdo->prepare('UPDATE stores SET code = ?, name = ?, address = ?, processor_id = ? WHERE id = ?')
-                    ->execute([$code, $name, $address, $processorId, $id]);
+                $this->pdo->prepare('UPDATE stores SET code = ?, name = ?, address = ?, fgo_series = ?, processing_shrinkage_pct = ?, processing_price_cents = ?, purchase_shrinkage_pct = ?, purchase_price_cents_per_kg = ?, processor_id = ? WHERE id = ?')
+                    ->execute([$code, $name, $address, $fgoSeries, $processingShrinkage, $processingPriceCents, $purchaseShrinkage, $purchasePriceCents, $processorId, $id]);
                 $storeId = $id;
                 $operation = 'STORE_UPDATE';
             } else {
-                $this->pdo->prepare('INSERT INTO stores (code, name, address, processor_id) VALUES (?, ?, ?, ?)')
-                    ->execute([$code, $name, $address, $processorId]);
+                $this->pdo->prepare('INSERT INTO stores (code, name, address, fgo_series, processing_shrinkage_pct, processing_price_cents, purchase_shrinkage_pct, purchase_price_cents_per_kg, processor_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+                    ->execute([$code, $name, $address, $fgoSeries, $processingShrinkage, $processingPriceCents, $purchaseShrinkage, $purchasePriceCents, $processorId]);
                 $storeId = (int) $this->pdo->lastInsertId();
                 $operation = 'STORE_CREATE';
 
                 foreach (['PV-CUST', 'FACT', 'BON', 'PV-FAG', 'PV-RET', 'AVIZ', 'NIR', 'BORD'] as $type) {
                     $this->pdo->prepare(
                         'INSERT IGNORE INTO document_series (store_id, document_type, series, next_number) VALUES (?, ?, ?, 1)'
-                    )->execute([$storeId, $type, $type . '-' . $code]);
+                    )->execute([$storeId, $type, $this->defaultDocumentSeries($type, $code)]);
                 }
             }
 
@@ -1347,7 +1361,6 @@ final class App
             throw $error;
         }
     }
-
     public function saveProcessor(array $data, int $userId): void
     {
         $id = (int) ($data['id'] ?? 0);
@@ -1803,9 +1816,9 @@ final class App
             }
         }
         $value = strtr($value, [
-            'Ă' => 'A', 'Â' => 'A', 'Î' => 'I', 'Ș' => 'S', 'Ş' => 'S', 'Ț' => 'T', 'Ţ' => 'T',
-            'ă' => 'a', 'â' => 'a', 'î' => 'i', 'ș' => 's', 'ş' => 's', 'ț' => 't', 'ţ' => 't',
-            'Þ' => 'T', 'þ' => 't', 'ª' => 'S', 'º' => 's',
+            'Ã„â€š' => 'A', 'Ãƒâ€š' => 'A', 'ÃƒÅ½' => 'I', 'ÃˆËœ' => 'S', 'Ã…Å¾' => 'S', 'ÃˆÅ¡' => 'T', 'Ã…Â¢' => 'T',
+            'Ã„Æ’' => 'a', 'ÃƒÂ¢' => 'a', 'ÃƒÂ®' => 'i', 'Ãˆâ„¢' => 's', 'Ã…Å¸' => 's', 'Ãˆâ€º' => 't', 'Ã…Â£' => 't',
+            'ÃƒÅ¾' => 'T', 'ÃƒÂ¾' => 't', 'Ã‚Âª' => 'S', 'Ã‚Âº' => 's',
         ]);
         $value = strtoupper($value);
         $value = preg_replace('/[^A-Z0-9]+/', ' ', $value) ?? $value;
@@ -2899,7 +2912,7 @@ final class App
         return $row ?: null;
     }
 
-    private function processingProcessorData(int $processorId): array
+    private function processingProcessorData(int $processorId, int $storeId = 0): array
     {
         if ($processorId <= 0) {
             return [
@@ -2912,6 +2925,13 @@ final class App
         $processor = $this->find('processors', $processorId);
         if (!$processor) {
             throw new RuntimeException('Procesatorul selectat nu exista.');
+        }
+        if ($storeId > 0) {
+            $store = $this->find('stores', $storeId);
+            if ($store && (int) ($store['processor_id'] ?? 0) === $processorId) {
+                $processor['processing_price_cents'] = (int) ($store['processing_price_cents'] ?? $processor['processing_price_cents']);
+                $processor['exchange_shrinkage_pct'] = (float) ($store['processing_shrinkage_pct'] ?? $processor['exchange_shrinkage_pct']);
+            }
         }
         return $processor;
     }

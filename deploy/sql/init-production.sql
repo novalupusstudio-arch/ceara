@@ -1,4 +1,40 @@
-﻿CREATE TABLE IF NOT EXISTS users (
+-- Ceara production reset + init
+--
+-- Run this script on the selected production database when starting from zero.
+-- It drops all application tables, including operational data and logs, then
+-- recreates the schema and seeds only the initial admin user, permissions and
+-- role defaults. It does not create stores, processors, lots, documents,
+-- inventory movements or audit entries.
+
+SET FOREIGN_KEY_CHECKS = 0;
+
+DROP TABLE IF EXISTS audit_log;
+DROP TABLE IF EXISTS inventory_transactions;
+DROP TABLE IF EXISTS company_settings;
+DROP TABLE IF EXISTS document_templates;
+DROP TABLE IF EXISTS documents;
+DROP TABLE IF EXISTS document_series;
+DROP TABLE IF EXISTS purchase_wax_exits;
+DROP TABLE IF EXISTS purchase_lots;
+DROP TABLE IF EXISTS factory_buffer_adjustments;
+DROP TABLE IF EXISTS factory_batch_items;
+DROP TABLE IF EXISTS factory_batches;
+DROP TABLE IF EXISTS processing_lot_movements;
+DROP TABLE IF EXISTS processing_lot_status_events;
+DROP TABLE IF EXISTS processing_lots;
+DROP TABLE IF EXISTS suppliers;
+DROP TABLE IF EXISTS siruta_localities;
+DROP TABLE IF EXISTS siruta_counties;
+DROP TABLE IF EXISTS customers;
+DROP TABLE IF EXISTS processors;
+DROP TABLE IF EXISTS user_stores;
+DROP TABLE IF EXISTS role_permissions;
+DROP TABLE IF EXISTS permissions;
+DROP TABLE IF EXISTS stores;
+DROP TABLE IF EXISTS users;
+
+SET FOREIGN_KEY_CHECKS = 1;
+CREATE TABLE IF NOT EXISTS users (
     id INT AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(80) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
@@ -13,6 +49,11 @@ CREATE TABLE IF NOT EXISTS stores (
     code VARCHAR(40) NOT NULL UNIQUE,
     name VARCHAR(160) NOT NULL,
     address VARCHAR(255) NOT NULL DEFAULT '',
+    fgo_series VARCHAR(80) NOT NULL DEFAULT '',
+    processing_shrinkage_pct DECIMAL(6,3) NOT NULL DEFAULT 0,
+    processing_price_cents INT NOT NULL DEFAULT 0,
+    purchase_shrinkage_pct DECIMAL(6,3) NOT NULL DEFAULT 0,
+    purchase_price_cents_per_kg INT NOT NULL DEFAULT 0,
     processor_id INT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

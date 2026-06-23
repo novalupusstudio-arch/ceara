@@ -6,16 +6,19 @@
 - CUI
 - trade registry number
 - address
-- bank
-- IBAN
-- phone
-- email
+- FGO API/private key
 
 ## Stores
 
-- code
+- short uppercase code, e.g. `BC`, `CJ`
 - name
 - address
+- FGO invoice series
+- default processor
+- processing shrinkage %
+- processing price with VAT lei/kg
+- purchase shrinkage %
+- purchase price with VAT lei/kg
 
 ## Processors
 
@@ -23,10 +26,13 @@
 - CUI
 - address
 - contact
-- processing price
-- shrinkage percentage
+- identity/master data
+
+Operational commercial defaults are stored on the store/gestiune. Processor fields are not the final source for lot calculations once store values exist.
 
 ## Document Series
 
-- store / gestiune series
-- simple increasing numbers for MVP
+- per store/gestiune and document type
+- default series format `<DOCUMENT_TYPE>-<STORE_CODE>`
+- independent increasing counter per store + document type
+- displayed number is padded to four digits, e.g. `PV-CUST-BC-0001`

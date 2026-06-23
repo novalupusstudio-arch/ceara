@@ -100,8 +100,8 @@ Settings:
 
 - company data
 - FGO API key
-- purchase default price/shrinkage settings
 - users, roles, stores, processors
+- store-level FGO series and commercial defaults for processing/purchase
 - editable document templates
 
 ## Production Deploy

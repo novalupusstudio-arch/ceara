@@ -76,8 +76,23 @@ final class Database
             $pdo->exec("ALTER TABLE processors ADD address VARCHAR(255) NOT NULL DEFAULT '' AFTER cui");
         }
 
+        if (!$pdo->query("SHOW COLUMNS FROM stores LIKE 'fgo_series'")->fetch()) {
+            $pdo->exec("ALTER TABLE stores ADD fgo_series VARCHAR(80) NOT NULL DEFAULT '' AFTER address");
+        }
+        if (!$pdo->query("SHOW COLUMNS FROM stores LIKE 'processing_shrinkage_pct'")->fetch()) {
+            $pdo->exec("ALTER TABLE stores ADD processing_shrinkage_pct DECIMAL(6,3) NOT NULL DEFAULT 0 AFTER fgo_series");
+        }
+        if (!$pdo->query("SHOW COLUMNS FROM stores LIKE 'processing_price_cents'")->fetch()) {
+            $pdo->exec("ALTER TABLE stores ADD processing_price_cents INT NOT NULL DEFAULT 0 AFTER processing_shrinkage_pct");
+        }
+        if (!$pdo->query("SHOW COLUMNS FROM stores LIKE 'purchase_shrinkage_pct'")->fetch()) {
+            $pdo->exec("ALTER TABLE stores ADD purchase_shrinkage_pct DECIMAL(6,3) NOT NULL DEFAULT 0 AFTER processing_price_cents");
+        }
+        if (!$pdo->query("SHOW COLUMNS FROM stores LIKE 'purchase_price_cents_per_kg'")->fetch()) {
+            $pdo->exec("ALTER TABLE stores ADD purchase_price_cents_per_kg INT NOT NULL DEFAULT 0 AFTER purchase_shrinkage_pct");
+        }
         if (!$pdo->query("SHOW COLUMNS FROM stores LIKE 'processor_id'")->fetch()) {
-            $pdo->exec("ALTER TABLE stores ADD processor_id INT NULL AFTER address");
+            $pdo->exec("ALTER TABLE stores ADD processor_id INT NULL AFTER purchase_price_cents_per_kg");
         }
 
         $customerColumns = [
@@ -482,11 +497,16 @@ final class Database
 
         $seriesCount = (int) $pdo->query('SELECT COUNT(*) FROM document_series')->fetchColumn();
         if ($seriesCount === 0) {
-            $storeId = (int) $pdo->query('SELECT id FROM stores ORDER BY id LIMIT 1')->fetchColumn();
-            foreach (['PV-CUST', 'FACT', 'BON', 'PV-FAG', 'PV-RET', 'AVIZ', 'NIR', 'BORD'] as $type) {
-                $pdo->prepare(
-                    'INSERT INTO document_series (store_id, document_type, series, next_number) VALUES (?, ?, ?, 1)'
-                )->execute([$storeId, $type, $type . '-GEST1']);
+            $store = $pdo->query('SELECT id, code FROM stores ORDER BY id LIMIT 1')->fetch(PDO::FETCH_ASSOC);
+            if ($store) {
+                $storeId = (int) $store['id'];
+                $storeCode = strtoupper((string) $store['code']);
+                foreach (['PV-CUST', 'FACT', 'BON', 'PV-FAG', 'PV-RET', 'AVIZ', 'NIR', 'BORD'] as $type) {
+                    $series = $storeCode === '' ? $type : $type . '-' . $storeCode;
+                    $pdo->prepare(
+                        'INSERT INTO document_series (store_id, document_type, series, next_number) VALUES (?, ?, ?, 1)'
+                    )->execute([$storeId, $type, $series]);
+                }
             }
         }
 
@@ -732,9 +752,9 @@ final class Database
             }
         }
         $converted = strtr($converted, [
-            'Ă' => 'A', 'Â' => 'A', 'Î' => 'I', 'Ș' => 'S', 'Ş' => 'S', 'Ț' => 'T', 'Ţ' => 'T',
-            'ă' => 'a', 'â' => 'a', 'î' => 'i', 'ș' => 's', 'ş' => 's', 'ț' => 't', 'ţ' => 't',
-            'Þ' => 'T', 'þ' => 't', 'ª' => 'S', 'º' => 's',
+            'Ãƒâ€žÃ¢â‚¬Å¡' => 'A', 'ÃƒÆ’Ã¢â‚¬Å¡' => 'A', 'ÃƒÆ’Ã…Â½' => 'I', 'ÃƒË†Ã‹Å“' => 'S', 'Ãƒâ€¦Ã…Â¾' => 'S', 'ÃƒË†Ã…Â¡' => 'T', 'Ãƒâ€¦Ã‚Â¢' => 'T',
+            'Ãƒâ€žÃ†â€™' => 'a', 'ÃƒÆ’Ã‚Â¢' => 'a', 'ÃƒÆ’Ã‚Â®' => 'i', 'ÃƒË†Ã¢â€žÂ¢' => 's', 'Ãƒâ€¦Ã…Â¸' => 's', 'ÃƒË†Ã¢â‚¬Âº' => 't', 'Ãƒâ€¦Ã‚Â£' => 't',
+            'ÃƒÆ’Ã…Â¾' => 'T', 'ÃƒÆ’Ã‚Â¾' => 't', 'Ãƒâ€šÃ‚Âª' => 'S', 'Ãƒâ€šÃ‚Âº' => 's',
         ]);
         $converted = preg_replace('/\s+/', ' ', $converted) ?? $converted;
         return trim($converted);

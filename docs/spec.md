@@ -90,11 +90,12 @@ Inputs:
 - PJ: name, CUI, phone, representative, county, locality, address
 - processor preselected from user's assigned store
 - gross wax kg
-- processing price / shrinkage shown from processor
+- processing price / shrinkage defaulted from the assigned store/processor and editable for this lot
 
 Actions:
 
 - create `processing_lots`
+- snapshot `processing_price_cents` and `shrinkage_pct` on the lot
 - create `processing_lot_movements.RECEIVE_WAX_FROM_CLIENT`
 - add `inventory_transactions.wax_custody` positive movement
 - create linked `PV-CUST` document row
@@ -112,7 +113,8 @@ Shows:
 Exchange:
 
 - cannot exceed wax available for exchange
-- calculates foundations from shrinkage
+- calculates foundations from the lot's saved shrinkage
+- calculates service value from the lot's saved processing price
 - cannot make `foundation_operational` negative
 - writes movement and negative foundation stock
 - can generate FGO invoice, FiscalWire receipt, PV-FAG
@@ -217,8 +219,8 @@ Purchase fields:
 
 - purchase date
 - gross kg
-- shrinkage %
-- price with VAT lei/kg
+- shrinkage %, defaulted from the assigned store and editable for the purchase
+- price with VAT lei/kg, defaulted from the assigned store and editable for the purchase
 - calculated total
 - calculated net kg
 - assigned store display
@@ -324,6 +326,7 @@ Config:
 - `config/config.php` defaults
 - optional ignored `config/fgo.local.php`
 - `company_settings.fgo_private_key` overrides private key if filled
+- invoice series is read from the active store/gestiune (`stores.fgo_series`); if blank, the app may fall back to `FACT-<store_code>`
 
 FGO response external invoice link is saved in document row.
 
@@ -350,18 +353,33 @@ Rules:
 - registry number
 - address
 - FGO API key
-- purchase default shrinkage %
-- purchase default price with VAT lei/kg
-- purchase factory shrinkage %
-- purchase factory price with VAT lei/kg
 
 Other settings:
 
 - roles and permissions
 - users
-- stores
+- stores/gestiuni: uppercase code, name, address, FGO series, assigned processor, processing terms, purchase terms
 - processors
 - document templates
+
+Store/gestiune commercial fields are saved in SQL and are the source of defaults for new operations:
+
+- `processing_shrinkage_pct`
+- `processing_price_cents`
+- `purchase_shrinkage_pct`
+- `purchase_price_cents_per_kg`
+
+Processing lots and purchase lots save their own effective values at creation time. Reports and generated documents should use the saved lot values, not later changes to the store defaults.
+
+## Document Series
+
+Document numbering is scoped by store/gestiune and document type.
+
+- Store code should be short uppercase, for example `BC` or `CJ`.
+- Default series format is `<DOCUMENT_TYPE>-<STORE_CODE>`, for example `PV-CUST-BC`.
+- Each `store_id + document_type` has its own counter in `document_series`.
+- Numbering starts at `0001` and increments by one.
+- Main document types: `PV-CUST`, `PV-FAG`, `PV-RET`, `AVIZ`, `NIR`, `FACT`, `BON`, `BORD`.
 
 ## Deployment
 

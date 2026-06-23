@@ -88,7 +88,7 @@ $currentStock = (int) ($data['current_stock_g'] ?? 0);
                         <td>
                             <?php if (!empty($adjustment['nir_document_id'])): ?>
                                 <a class="table-link" href="index.php?page=document_mock&amp;document_id=<?= h((string) $adjustment['nir_document_id']) ?>" target="_blank" rel="noopener">
-                                    <?= h($adjustment['nir_type'] . ' ' . $adjustment['nir_series'] . '-' . $adjustment['nir_number']) ?>
+                                    <?= h($adjustment['nir_series'] . '-' . str_pad((string) max(1, (int) $adjustment['nir_number']), 4, '0', STR_PAD_LEFT)) ?>
                                 </a>
                             <?php else: ?>
                                 <span class="muted">-</span>

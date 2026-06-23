@@ -1,14 +1,20 @@
 <?php
 $processorsForJs = [];
+$defaultProcessorId = isset($data['default_processor']['id']) ? (int) $data['default_processor']['id'] : 0;
 foreach ($data['processors'] as $processor) {
+    $priceCents = (int) $processor['processing_price_cents'];
+    $shrinkagePct = (float) $processor['exchange_shrinkage_pct'];
+    if ($defaultProcessorId > 0 && (int) $processor['id'] === $defaultProcessorId && !empty($data['default_processor'])) {
+        $priceCents = (int) $data['default_processor']['processing_price_cents'];
+        $shrinkagePct = (float) $data['default_processor']['exchange_shrinkage_pct'];
+    }
     $processorsForJs[] = [
         'id' => (int) $processor['id'],
         'name' => $processor['name'],
-        'processing_price_cents' => (int) $processor['processing_price_cents'],
-        'exchange_shrinkage_pct' => (float) $processor['exchange_shrinkage_pct'],
+        'processing_price_cents' => $priceCents,
+        'exchange_shrinkage_pct' => $shrinkagePct,
     ];
 }
-$defaultProcessorId = isset($data['default_processor']['id']) ? (int) $data['default_processor']['id'] : 0;
 ?>
 
 <header class="page-header">
@@ -128,11 +134,11 @@ $defaultProcessorId = isset($data['default_processor']['id']) ? (int) $data['def
                 </label>
                 <label>
                     Pret procesare
-                    <input value="0.00 lei" readonly data-processing-price>
+                    <input name="processing_price" required inputmode="decimal" value="0.00" data-processing-price>
                 </label>
                 <label>
                     Scazamant %
-                    <input value="0.000" readonly data-processing-shrinkage>
+                    <input name="shrinkage_pct" required inputmode="decimal" value="0.000" data-processing-shrinkage>
                 </label>
             </div>
 

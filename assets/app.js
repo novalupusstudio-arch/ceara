@@ -503,21 +503,31 @@ document.addEventListener("DOMContentLoaded", () => {
     newCustomerButton.textContent = isPJ ? "Preia date ANAF" : "Client nou";
   }
 
-  function renderProcessorValues() {
+  function selectedProcessorDefaults() {
     const selectedId = Number(processorSelect.value || 0);
-    const processor = processors.find((item) => item.id === selectedId);
+    return processors.find((item) => item.id === selectedId) || null;
+  }
+
+  function applyProcessorDefaults() {
+    const processor = selectedProcessorDefaults();
     const cents = processor ? processor.processing_price_cents : 0;
     const shrinkage = processor ? Number(processor.exchange_shrinkage_pct) : 0;
+    processingPrice.value = (cents / 100).toFixed(2);
+    processingShrinkage.value = shrinkage.toFixed(3);
+    renderProcessorValues();
+  }
+
+  function renderProcessorValues() {
     const grossValue = Number(String(grossInput.value || "0").replace(",", "."));
+    const priceLei = Number(String(processingPrice.value || "0").replace(",", "."));
+    const cents = Math.max(0, Math.round(priceLei * 100));
+    const shrinkage = Number(String(processingShrinkage.value || "0").replace(",", "."));
     const exchangeKg = Math.max(0, grossValue * (1 - (shrinkage / 100)));
     const processingKg = Math.max(0, grossValue);
     const costCents = Math.max(0, Math.round(processingKg * cents));
-    processingPrice.value = `${(cents / 100).toFixed(2)} lei`;
-    processingShrinkage.value = shrinkage.toFixed(3);
     processingExchange.value = formatKg(exchangeKg);
     processingCost.value = `${(costCents / 100).toFixed(2)} lei`;
   }
-
   function applyCustomer(customer) {
     existingCustomerId.value = customer.id ? String(customer.id) : "0";
     forceNewCustomer.value = customer.id ? "0" : "1";
@@ -593,8 +603,10 @@ document.addEventListener("DOMContentLoaded", () => {
     input.addEventListener("change", () => switchCustomerMode(input.value));
   });
 
-  processorSelect.addEventListener("change", renderProcessorValues);
+  processorSelect.addEventListener("change", applyProcessorDefaults);
   grossInput.addEventListener("input", renderProcessorValues);
+  processingPrice.addEventListener("input", renderProcessorValues);
+  processingShrinkage.addEventListener("input", renderProcessorValues);
 
   searchInput.addEventListener("input", () => {
     existingCustomerId.value = "0";
@@ -703,5 +715,5 @@ document.addEventListener("DOMContentLoaded", () => {
   if (processorSelect.options.length > 0 && !processorSelect.value) {
     processorSelect.value = processorSelect.options[0].value;
   }
-  renderProcessorValues();
+  applyProcessorDefaults();
 });

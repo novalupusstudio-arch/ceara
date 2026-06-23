@@ -16,6 +16,16 @@ Current key templates/outputs:
 - `FACT`: FGO invoice generation for processing service invoices.
 - `BON`: FiscalWire `.inp` receipt download for cash/card.
 
+## Series And Numbering
+
+Generated internal document counters are stored in `document_series` per `store_id + document_type`.
+
+- default series format: `<DOCUMENT_TYPE>-<STORE_CODE>`
+- example: `PV-CUST-BC-0001`
+- numbering starts from `0001` for every store/document type pair
+- store code should be short uppercase
+- FGO invoice API uses the store-level invoice series from `stores.fgo_series`
+
 ## Purchase Documents
 
 Purchase flow currently does not generate internal PDFs. It records external document references:

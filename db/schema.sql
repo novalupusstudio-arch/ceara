@@ -13,6 +13,11 @@ CREATE TABLE IF NOT EXISTS stores (
     code VARCHAR(40) NOT NULL UNIQUE,
     name VARCHAR(160) NOT NULL,
     address VARCHAR(255) NOT NULL DEFAULT '',
+    fgo_series VARCHAR(80) NOT NULL DEFAULT '',
+    processing_shrinkage_pct DECIMAL(6,3) NOT NULL DEFAULT 0,
+    processing_price_cents INT NOT NULL DEFAULT 0,
+    purchase_shrinkage_pct DECIMAL(6,3) NOT NULL DEFAULT 0,
+    purchase_price_cents_per_kg INT NOT NULL DEFAULT 0,
     processor_id INT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

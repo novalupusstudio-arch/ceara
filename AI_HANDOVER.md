@@ -8,7 +8,7 @@ Current source path on this machine: `D:\Novalupusstudio\ceara`.
 Local XAMPP deployment target is configured per machine in `config/xampp-target.local.txt`; current machine uses `D:\xampp\htdocs\ceara`.
 Git remote: `https://github.com/novalupusstudio-arch/ceara.git`, branch `main`.
 
-As of this handoff, `main` on GitHub contains the current development state through commit `5d212ff Adauga flux separat pentru achizitie ceara`.
+As of this handoff, `main` on GitHub contains the development state through commit `5d212ff Adauga flux separat pentru achizitie ceara`. Local development may contain later uncommitted changes; do not commit or push unless the user explicitly asks.
 
 ## How To Continue On A New Machine
 
@@ -88,6 +88,8 @@ Implemented movement types:
 Important processing behavior:
 
 - Creating a lot creates `RECEIVE_WAX_FROM_CLIENT`, inventory `wax_custody`, and linked `PV-CUST` document row.
+- Processing price and shrinkage are defaulted from the user's assigned store/gestiune and assigned processor, but are editable on the lot creation form.
+- The actual commercial values used for calculations are snapshotted on the lot (`processing_lots.processing_price_cents`, `processing_lots.shrinkage_pct`). Later lot detail, invoices, receipts and PV values must read the lot snapshot, not current global defaults.
 - Exchange validates against unexchanged wax and operational foundation stock.
 - Exchange can generate FGO invoice and FiscalWire receipt from movement row.
 - Return wax decreases custody and links `PV-RET`.
@@ -145,6 +147,7 @@ Config sources:
 - default `config/config.php`
 - local ignored config `config/fgo.local.php`
 - `company_settings.fgo_private_key` entered in `Setari > Date societate` overrides private key from config if present
+- invoice series comes from the active store/gestiune (`stores.fgo_series`); if it is blank the app may fall back to a generated `FACT-<store_code>` style series
 
 The app sends the invoice data and stores the returned external PDF/link in `documents.external_url`.
 
@@ -182,12 +185,30 @@ Used by processing customer form and purchase supplier form.
 - registry number
 - address
 - FGO API/private key
-- default purchase shrinkage %
-- default purchase price with VAT lei/kg
-- purchase factory shrinkage %
-- purchase factory price with VAT lei/kg
+
+Store/gestiune settings store operational defaults in SQL:
+
+- short uppercase code, used in document series, e.g. `BC`, `CJ`
+- name and address
+- FGO invoice series
+- assigned default processor
+- processing shrinkage % and processing price with VAT lei/kg
+- purchase shrinkage % and purchase price with VAT lei/kg
+
+Processor settings keep processor identity/master data. The assigned store values are the operational defaults used when creating new lots and purchases.
 
 Other settings pages include users, stores, processors, roles, document templates.
+
+## Document Numbering
+
+Document series are per store and document type in `document_series`.
+
+- default series format: `<DOCUMENT_TYPE>-<STORE_CODE>`, for example `PV-CUST-BC`
+- numbering is independent per store + document type
+- `next_number` starts from `1`
+- displayed document number is padded to four digits, for example `PV-CUST-BC-0001`
+
+Main document types currently used/planned in this rule: `PV-CUST`, `PV-FAG`, `PV-RET`, `AVIZ`, `NIR`, `FACT`, `BON`, `BORD`.
 
 ## Production Deploy State
 
@@ -209,6 +230,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-production-z
 5. Initialize an empty DB with `deploy/sql/init-production.sql`.
 6. Initial production login from SQL seed: `admin / CearaAdmin!2026`.
 7. Change password immediately.
+
+For an already initialized production database, do not run the full reset script. Apply only the incremental SQL files requested for the change. Current incremental scripts from the 2026-06-23 settings/series work:
+
+- `deploy/sql/20260623-add-store-fgo-series.sql`
+- `deploy/sql/20260623-normalize-document-series.sql`
+- `deploy/sql/20260623-add-store-commercial-terms.sql`
 
 ## Known Current Gaps / Recommended Next Work
 

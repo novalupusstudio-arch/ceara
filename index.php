@@ -103,14 +103,14 @@ if ($page === 'document_mock') {
     $pdf = $app->documentPdfById((int) $doc['id']);
     if ($pdf !== null) {
         header('Content-Type: application/pdf');
-        header('Content-Disposition: inline; filename="' . preg_replace('/[^A-Za-z0-9._-]+/', '_', trim($doc['document_type'] . '-' . $doc['series'] . '-' . $doc['number'])) . '.pdf"');
+        header('Content-Disposition: inline; filename="' . preg_replace('/[^A-Za-z0-9._-]+/', '_', trim($doc['series'] . '-' . str_pad((string) max(1, (int) $doc['number']), 4, '0', STR_PAD_LEFT))) . '.pdf"');
         echo $pdf;
         exit;
     }
 
     header('Content-Type: text/plain; charset=utf-8');
     echo "Mock document PDF\n";
-    echo $doc['document_type'] . ' ' . $doc['series'] . '-' . $doc['number'] . "\n";
+    echo $doc['series'] . '-' . str_pad((string) max(1, (int) $doc['number']), 4, '0', STR_PAD_LEFT) . "\n";
     echo 'Status: ' . $doc['status'] . "\n";
     echo 'Generarea PDF va fi definita ulterior.';
     exit;
@@ -201,6 +201,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'gross_kg' => post_string('gross_kg'),
                 'store_id' => (int) $assignedStore['id'],
                 'processor_id' => post_int('processor_id'),
+                'processing_price' => post_string('processing_price'),
+                'shrinkage_pct' => post_string('shrinkage_pct'),
             ], $user['id']);
             flash('Lotul de procesare a fost creat.');
             redirect('lots');
@@ -358,7 +360,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'code' => post_string('store_code'),
                 'name' => post_string('store_name'),
                 'address' => post_string('store_address'),
+                'fgo_series' => post_string('store_fgo_series'),
                 'processor_id' => post_int('store_processor_id'),
+                'processing_shrinkage_pct' => post_string('store_processing_shrinkage_pct'),
+                'processing_price' => post_string('store_processing_price'),
+                'purchase_shrinkage_pct' => post_string('store_purchase_shrinkage_pct'),
+                'purchase_price' => post_string('store_purchase_price'),
             ], $user['id']);
             flash('Gestiunea a fost salvata.');
             redirect('settings', ['settings_tab' => 'stores']);
@@ -400,10 +407,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'registry_number' => post_string('registry_number'),
                 'address' => post_string('address'),
                 'fgo_private_key' => post_string('fgo_private_key'),
-                'purchase_default_shrinkage_pct' => post_string('purchase_default_shrinkage_pct'),
-                'purchase_default_price' => post_string('purchase_default_price'),
-                'purchase_factory_shrinkage_pct' => post_string('purchase_factory_shrinkage_pct'),
-                'purchase_factory_price' => post_string('purchase_factory_price'),
+
             ], $user['id']);
             flash('Datele societatii au fost salvate.');
             redirect('settings', ['settings_tab' => 'company']);
@@ -415,6 +419,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'store_code' => post_string('store_code'),
                 'store_name' => post_string('store_name'),
                 'store_address' => post_string('store_address'),
+                'store_fgo_series' => post_string('store_fgo_series'),
                 'store_processor_id' => post_int('store_processor_id'),
                 'processor_id' => post_int('processor_id'),
                 'processor_name' => post_string('processor_name'),
