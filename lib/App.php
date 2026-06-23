@@ -2451,10 +2451,7 @@ final class App
 
     private function inventory(string $type, int $qty, int $storeId, string $refType, int $refId, string $notes): void
     {
-        $this->pdo->prepare(
-            'INSERT INTO inventory_transactions (movement_type, qty_g, store_id, reference_type, reference_id, notes)
-             VALUES (?, ?, ?, ?, ?, ?)'
-        )->execute([$type, $qty, $storeId, $refType, $refId, $notes]);
+        (new \Ceara\Inventory\InventoryWriter($this->pdo))->record($type, $qty, $storeId, $refType, $refId, $notes);
     }
 
     private function processingMovement(int $lotId, string $type, int $wax, int $foundation, int $serviceValue, string $notes, int $userId): int
