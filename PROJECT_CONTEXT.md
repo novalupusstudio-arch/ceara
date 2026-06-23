@@ -1,4 +1,4 @@
-﻿# Project Context
+# Project Context
 
 ## Purpose
 
@@ -25,7 +25,7 @@ Purchased wax must not be mixed with custody wax, neither in stock nor in factor
 - CSS in `assets/styles.css`
 - Dompdf bundled in committed `vendor/`
 - SIRUTA source CSV committed in `release/siruta.csv`
-- Lightweight `Ceara\` autoload for new namespaced classes under `lib/`
+- Lightweight `Ceara\` autoload for namespaced classes under `lib/`
 
 ## Refactoring Direction
 
@@ -37,6 +37,20 @@ Current modular folders:
 - `lib/Http/`: request/action dispatchers.
 - `lib/Documents/`: document issuing, file handling, PDF/template rendering and variable building.
 - `lib/Inventory/`: inventory ledger writer, stock balances and register rows.
+
+Current split services:
+
+- `lib/CustomerService.php`
+- `lib/SupplierService.php`
+- `lib/DocumentService.php`
+- `lib/DocumentCatalogService.php`
+- `lib/FgoService.php`
+- `lib/FiscalWireService.php`
+- `lib/ProcessingWriteService.php`
+- `lib/ProcessingDocumentService.php`
+- `lib/PurchaseService.php`
+- `lib/SettingsService.php`
+- `lib/ProcessingService.php`
 
 Existing `App.php` remains the temporary facade while behavior is moved out in small, tested commits. Avoid big-bang rewrites; keep schema/business behavior stable unless the user explicitly asks for a behavior change.
 
@@ -209,9 +223,7 @@ PJ/PFA:
 
 Purchase entry does not generate PDF or internal fiscal documents. It stores external document references only.
 
-### Purchase Exit
-
-`purchase_exit` records wax leaving purchased stock:
+Purchase exit:
 
 - partner/factory name
 - CUI/identifier
@@ -243,8 +255,8 @@ It is a compact table-style A4 document with GDPR text.
 
 Fiscal integrations:
 
-- FGO invoice generation for processing exchange invoice (`FACT`).
-- FiscalWire `.inp` download for cash/card receipt (`BON`).
+- FGO invoice generation for processing exchange invoice (`FACT`)
+- FiscalWire `.inp` download for cash/card receipt (`BON`)
 
 FiscalWire file name format:
 
