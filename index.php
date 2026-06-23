@@ -4,17 +4,18 @@ declare(strict_types=1);
 
 session_start();
 
+$autoload = __DIR__ . '/vendor/autoload.php';
+if (is_file($autoload)) {
+    require $autoload;
+}
+
+require __DIR__ . '/lib/autoload.php';
 require __DIR__ . '/lib/helpers.php';
 require __DIR__ . '/lib/Database.php';
 require __DIR__ . '/lib/Auth.php';
 require __DIR__ . '/lib/FgoClient.php';
 require __DIR__ . '/lib/FiscalWireExporter.php';
 require __DIR__ . '/lib/App.php';
-
-$autoload = __DIR__ . '/vendor/autoload.php';
-if (is_file($autoload)) {
-    require $autoload;
-}
 
 $config = require __DIR__ . '/config/config.php';
 $db = new Database($config);
