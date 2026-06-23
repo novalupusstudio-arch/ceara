@@ -34,7 +34,7 @@ The application is being split incrementally to reduce large-file edits and cont
 Current modular folders:
 
 - `lib/Integrations/`: FGO and FiscalWire integration clients.
-- `lib/Documents/`: PDF and template rendering helpers.
+- `lib/Documents/`: document issuing, file handling, PDF/template rendering and variable building.
 - `lib/Inventory/`: inventory ledger writer.
 
 Existing `App.php` remains the temporary facade while behavior is moved out in small, tested commits. Avoid big-bang rewrites; keep schema/business behavior stable unless the user explicitly asks for a behavior change.
