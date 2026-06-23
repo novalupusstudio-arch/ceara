@@ -307,7 +307,7 @@ final class App
 
     public function documentById(int $documentId): ?array
     {
-        return $this->find('documents', $documentId);
+        return $this->documentFiles()->findById($documentId);
     }
 
     public function documentPreviewByTemplateId(int $templateId): ?string
@@ -322,34 +322,7 @@ final class App
 
     public function documentPdfById(int $documentId): ?string
     {
-        $doc = $this->documentById($documentId);
-        if (!$doc) {
-            return null;
-        }
-
-        $filePath = (string) ($doc['file_path'] ?? '');
-        if ($filePath === '' || strtolower(pathinfo($filePath, PATHINFO_EXTENSION)) !== 'pdf') {
-            $this->renderDocumentFile($documentId);
-            $doc = $this->documentById($documentId);
-            $filePath = (string) ($doc['file_path'] ?? '');
-            if ($filePath === '' || strtolower(pathinfo($filePath, PATHINFO_EXTENSION)) !== 'pdf') {
-                return null;
-            }
-        }
-
-        $absolutePath = $this->storagePath($filePath);
-        if (!is_file($absolutePath)) {
-            $this->renderDocumentFile($documentId);
-            $doc = $this->documentById($documentId);
-            $filePath = (string) ($doc['file_path'] ?? '');
-            $absolutePath = $filePath === '' ? '' : $this->storagePath($filePath);
-            if ($absolutePath === '' || !is_file($absolutePath)) {
-                return null;
-            }
-        }
-
-        $pdf = file_get_contents($absolutePath);
-        return $pdf === false ? null : $pdf;
+        return $this->documentFiles()->pdfById($documentId, fn (int $id) => $this->renderDocumentFile($id));
     }
 
     public function processingRegisterData(int $userId, string $dateStart = '', string $dateEnd = ''): array
@@ -2156,14 +2129,7 @@ final class App
 
     private function removeReplacedHtmlDocument(string $oldRelativePath, string $newRelativePath): void
     {
-        if ($oldRelativePath === '' || $oldRelativePath === $newRelativePath || strtolower(pathinfo($oldRelativePath, PATHINFO_EXTENSION)) !== 'html') {
-            return;
-        }
-
-        $absolutePath = $this->storagePath($oldRelativePath);
-        if (is_file($absolutePath) && str_starts_with(str_replace('\\', '/', $absolutePath), str_replace('\\', '/', dirname(__DIR__) . '/storage/documents/'))) {
-            unlink($absolutePath);
-        }
+        $this->documentFiles()->removeReplacedHtmlDocument($oldRelativePath, $newRelativePath);
     }
 
     private function documentTemplateByCode(string $code): ?array
@@ -2433,9 +2399,7 @@ final class App
 
     private function documentRelativePath(array $doc, array $store, string $extension): string
     {
-        $storeCode = $this->safePathPart((string) ($store['code'] ?? 'gestiune'));
-        $fileName = $this->safePathPart($this->formatDocumentLabel($doc)) . '.' . $extension;
-        return 'documents/' . $storeCode . '/' . $fileName;
+        return $this->documentFiles()->relativePath($doc, $store, $this->formatDocumentLabel($doc), $extension);
     }
 
     private function safePathPart(string $value): string
@@ -2446,7 +2410,12 @@ final class App
 
     private function storagePath(string $relativePath): string
     {
-        return dirname(__DIR__) . '/storage/' . ltrim(str_replace('\\', '/', $relativePath), '/');
+        return $this->documentFiles()->storagePath($relativePath);
+    }
+
+    private function documentFiles(): \Ceara\Documents\DocumentFiles
+    {
+        return new \Ceara\Documents\DocumentFiles($this->pdo, dirname(__DIR__) . '/storage');
     }
 
     private function inventory(string $type, int $qty, int $storeId, string $refType, int $refId, string $notes): void
