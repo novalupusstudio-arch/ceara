@@ -20,6 +20,36 @@ final class ProcessingService
         )->fetchAll();
     }
 
+    public function processingLotSummaries(): array
+    {
+        $lots = $this->processingLots();
+        $summaries = [];
+        foreach ($lots as $lot) {
+            $summaries[] = $this->buildProcessingLotSummary($lot, $this->movementTotals([(int) $lot['id']])[(int) $lot['id']] ?? []);
+        }
+
+        return $summaries;
+    }
+
+    public function processingLotSummary(int $lotId): ?array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT p.*, c.name AS customer_name, c.customer_type, s.name AS store_name, pr.name AS processor_name
+             FROM processing_lots p
+             JOIN customers c ON c.id = p.customer_id
+             JOIN stores s ON s.id = p.store_id
+             LEFT JOIN processors pr ON pr.id = p.processor_id
+             WHERE p.id = ?'
+        );
+        $stmt->execute([$lotId]);
+        $row = $stmt->fetch();
+        if (!$row) {
+            return null;
+        }
+
+        return $this->buildProcessingLotSummary($row, $this->movementTotals([$lotId])[$lotId] ?? []);
+    }
+
     public function factoryDeliveryData(int $processorId, callable $lotSummariesProvider): array
     {
         $processors = $this->pdo->query('SELECT * FROM processors ORDER BY id')->fetchAll();
@@ -175,6 +205,93 @@ final class ProcessingService
             'documents' => $this->documentsForLot($lotId),
             'foundation_stock_g' => $this->inventory->sum('foundation_operational'),
         ];
+    }
+
+    private function movementTotals(array $lotIds): array
+    {
+        if (!$lotIds) {
+            return [];
+        }
+
+        $placeholders = implode(',', array_fill(0, count($lotIds), '?'));
+        $stmt = $this->pdo->prepare(
+            "SELECT lot_id, movement_type,
+                    COALESCE(SUM(wax_g), 0) AS wax_g,
+                    COALESCE(SUM(foundation_g), 0) AS foundation_g,
+                    COALESCE(SUM(service_value_cents), 0) AS service_value_cents
+             FROM processing_lot_movements
+             WHERE lot_id IN ($placeholders)
+             GROUP BY lot_id, movement_type"
+        );
+        $stmt->execute($lotIds);
+
+        $totals = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $totals[(int) $row['lot_id']][$row['movement_type']] = [
+                'wax_g' => (int) $row['wax_g'],
+                'foundation_g' => (int) $row['foundation_g'],
+                'service_value_cents' => (int) $row['service_value_cents'],
+            ];
+        }
+
+        return $totals;
+    }
+
+    private function buildProcessingLotSummary(array $lot, array $totals): array
+    {
+        $wax = static fn (string $type): int => (int) ($totals[$type]['wax_g'] ?? 0);
+        $foundation = static fn (string $type): int => (int) ($totals[$type]['foundation_g'] ?? 0);
+
+        $received = $wax('RECEIVE_WAX_FROM_CLIENT');
+        $exchanged = $wax('EXCHANGE_WAX_WITH_CLIENT');
+        $sentFactory = $wax('SEND_WAX_TO_FACTORY');
+        $returned = $wax('RETURN_WAX_TO_CLIENT');
+        $rejected = $wax('FACTORY_REJECT_WAX');
+        $lossWax = $wax('RECORD_LOSS');
+        $foundationDelivered = $foundation('EXCHANGE_WAX_WITH_CLIENT');
+        $foundationReceived = $foundation('RECEIVE_FOUNDATION_FROM_FACTORY');
+        $foundationRecovered = $foundation('RECOVER_FOUNDATION_FROM_CLIENT');
+        $lossFoundation = $foundation('RECORD_LOSS');
+
+        $waxCustody = max(0, $received - $sentFactory - $returned - $lossWax);
+        $waxAvailableForExchange = max(0, $received - $exchanged - $sentFactory - $returned - $rejected - $lossWax);
+        $waxToFactory = max(0, $exchanged - $sentFactory - $rejected);
+        $openRejectedWax = max(0, $rejected - $lossWax);
+        $exchangedWaxNotSentFactory = max(0, $exchanged - $sentFactory);
+        $rejectedWaxWithFoundationDelivered = min($openRejectedWax, $exchangedWaxNotSentFactory);
+        $foundationToRecover = max(0, $this->foundationForWax($rejectedWaxWithFoundationDelivered, (float) $lot['shrinkage_pct']) - $foundationRecovered - $lossFoundation);
+        $foundationExpectedForClient = $this->foundationForWax($exchanged, (float) $lot['shrinkage_pct']);
+        $foundationToClient = max(0, $foundationExpectedForClient - $foundationDelivered);
+
+        $status = 'Procesare';
+        if ($foundationToRecover > 0) {
+            $status = 'Recuperare';
+        } elseif ($waxCustody === 0 && $waxToFactory === 0 && $foundationToClient === 0 && $foundationToRecover === 0 && $openRejectedWax === 0) {
+            $status = 'Inchis';
+        }
+
+        return [
+            'lot' => $lot,
+            'total_received_g' => $received,
+            'wax_custody_g' => $waxCustody,
+            'wax_available_for_exchange_g' => $waxAvailableForExchange,
+            'wax_exchanged_g' => $exchanged,
+            'foundation_delivered_g' => $foundationDelivered,
+            'wax_to_factory_g' => $waxToFactory,
+            'wax_sent_factory_g' => $sentFactory,
+            'foundation_received_factory_g' => $foundationReceived,
+            'wax_rejected_factory_g' => $rejected,
+            'wax_returned_client_g' => $returned,
+            'foundation_to_recover_g' => $foundationToRecover,
+            'foundation_to_client_g' => $foundationToClient,
+            'loss_g' => $lossWax + $lossFoundation,
+            'calculated_status' => $status,
+        ];
+    }
+
+    private function foundationForWax(int $wax, float $shrinkagePct): int
+    {
+        return max(0, (int) round($wax * (1 - ($shrinkagePct / 100))));
     }
 
     private function documentsForLot(int $lotId): array

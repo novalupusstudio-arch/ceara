@@ -165,7 +165,7 @@ final class App
 
     public function dashboard(): array
     {
-        $summaries = $this->processingLotSummaries();
+        $summaries = $this->processingService()->processingLotSummaries();
         $openLots = 0;
         $recoveryLots = 0;
         $waxCustody = 0;
@@ -197,7 +197,7 @@ final class App
 
     public function factoryDeliveryData(int $processorId): array
     {
-        return $this->processingService()->factoryDeliveryData($processorId, fn () => $this->processingLotSummaries());
+        return $this->processingService()->factoryDeliveryData($processorId, fn () => $this->processingService()->processingLotSummaries());
     }
 
     public function processingLotStatuses(): array
@@ -207,7 +207,7 @@ final class App
 
     public function processingLotsBoard(array $filters = []): array
     {
-        return $this->processingService()->processingLotsBoard($this->processingLotSummaries(), $filters);
+        return $this->processingService()->processingLotsBoard($this->processingService()->processingLotSummaries(), $filters);
     }
 
     public function factoryBufferData(): array
@@ -243,7 +243,7 @@ final class App
 
     public function processingLotDetail(int $lotId): array
     {
-        return $this->processingService()->processingLotDetail($lotId, fn (int $id) => $this->processingLotSummary($id));
+        return $this->processingService()->processingLotDetail($lotId, fn (int $id) => $this->processingService()->processingLotSummary($id));
     }
 
     public function purchaseLots(): array
@@ -1242,298 +1242,6 @@ final class App
         $this->inventoryService()->record($type, $qty, $storeId, $refType, $refId, $notes);
     }
 
-    private function processingLotSummaries(): array
-    {
-        $lots = $this->processingLots();
-        $summaries = [];
-        foreach ($lots as $lot) {
-            $summaries[] = $this->buildProcessingLotSummary($lot, $this->movementTotals([(int) $lot['id']])[(int) $lot['id']] ?? []);
-        }
-        return $summaries;
-    }
-
-    private function processingLotSummary(int $lotId): ?array
-    {
-        $lot = $this->pdo->prepare(
-            'SELECT p.*, c.name AS customer_name, c.customer_type, s.name AS store_name, pr.name AS processor_name
-             FROM processing_lots p
-             JOIN customers c ON c.id = p.customer_id
-             JOIN stores s ON s.id = p.store_id
-             LEFT JOIN processors pr ON pr.id = p.processor_id
-             WHERE p.id = ?'
-        );
-        $lot->execute([$lotId]);
-        $row = $lot->fetch();
-        if (!$row) {
-            return null;
-        }
-
-        return $this->buildProcessingLotSummary($row, $this->movementTotals([$lotId])[$lotId] ?? []);
-    }
-
-    private function movementTotals(array $lotIds): array
-    {
-        if (!$lotIds) {
-            return [];
-        }
-
-        $placeholders = implode(',', array_fill(0, count($lotIds), '?'));
-        $stmt = $this->pdo->prepare(
-            "SELECT lot_id, movement_type,
-                    COALESCE(SUM(wax_g), 0) AS wax_g,
-                    COALESCE(SUM(foundation_g), 0) AS foundation_g,
-                    COALESCE(SUM(service_value_cents), 0) AS service_value_cents
-             FROM processing_lot_movements
-             WHERE lot_id IN ($placeholders)
-             GROUP BY lot_id, movement_type"
-        );
-        $stmt->execute($lotIds);
-
-        $totals = [];
-        foreach ($stmt->fetchAll() as $row) {
-            $totals[(int) $row['lot_id']][$row['movement_type']] = [
-                'wax_g' => (int) $row['wax_g'],
-                'foundation_g' => (int) $row['foundation_g'],
-                'service_value_cents' => (int) $row['service_value_cents'],
-            ];
-        }
-        return $totals;
-    }
-
-    private function buildProcessingLotSummary(array $lot, array $totals): array
-    {
-        $wax = static fn (string $type): int => (int) ($totals[$type]['wax_g'] ?? 0);
-        $foundation = static fn (string $type): int => (int) ($totals[$type]['foundation_g'] ?? 0);
-
-        $received = $wax('RECEIVE_WAX_FROM_CLIENT');
-        $exchanged = $wax('EXCHANGE_WAX_WITH_CLIENT');
-        $sentFactory = $wax('SEND_WAX_TO_FACTORY');
-        $returned = $wax('RETURN_WAX_TO_CLIENT');
-        $rejected = $wax('FACTORY_REJECT_WAX');
-        $lossWax = $wax('RECORD_LOSS');
-        $foundationDelivered = $foundation('EXCHANGE_WAX_WITH_CLIENT');
-        $foundationReceived = $foundation('RECEIVE_FOUNDATION_FROM_FACTORY');
-        $foundationRecovered = $foundation('RECOVER_FOUNDATION_FROM_CLIENT');
-        $lossFoundation = $foundation('RECORD_LOSS');
-
-        $waxCustody = max(0, $received - $sentFactory - $returned - $lossWax);
-        $waxAvailableForExchange = max(0, $received - $exchanged - $sentFactory - $returned - $rejected - $lossWax);
-        $waxToFactory = max(0, $exchanged - $sentFactory - $rejected);
-        $openRejectedWax = max(0, $rejected - $lossWax);
-        $exchangedWaxNotSentFactory = max(0, $exchanged - $sentFactory);
-        $rejectedWaxWithFoundationDelivered = min($openRejectedWax, $exchangedWaxNotSentFactory);
-        $foundationToRecover = max(0, $this->foundationForWax($rejectedWaxWithFoundationDelivered, (float) $lot['shrinkage_pct']) - $foundationRecovered - $lossFoundation);
-        $foundationExpectedForClient = $this->foundationForWax($exchanged, (float) $lot['shrinkage_pct']);
-        $foundationToClient = max(0, $foundationExpectedForClient - $foundationDelivered);
-
-        $status = 'Procesare';
-        if ($foundationToRecover > 0) {
-            $status = 'Recuperare';
-        } elseif ($waxCustody === 0 && $waxToFactory === 0 && $foundationToClient === 0 && $foundationToRecover === 0 && $openRejectedWax === 0) {
-            $status = 'Inchis';
-        }
-
-        return [
-            'lot' => $lot,
-            'total_received_g' => $received,
-            'wax_custody_g' => $waxCustody,
-            'wax_available_for_exchange_g' => $waxAvailableForExchange,
-            'wax_exchanged_g' => $exchanged,
-            'foundation_delivered_g' => $foundationDelivered,
-            'wax_to_factory_g' => $waxToFactory,
-            'wax_sent_factory_g' => $sentFactory,
-            'foundation_received_factory_g' => $foundationReceived,
-            'wax_rejected_factory_g' => $rejected,
-            'wax_returned_client_g' => $returned,
-            'foundation_to_recover_g' => $foundationToRecover,
-            'foundation_to_client_g' => $foundationToClient,
-            'loss_g' => $lossWax + $lossFoundation,
-            'calculated_status' => $status,
-        ];
-    }
-
-    private function foundationForWax(int $wax, float $shrinkagePct): int
-    {
-        return max(0, (int) round($wax * (1 - ($shrinkagePct / 100))));
-    }
-
-    private function documentsForLot(int $lotId): array
-    {
-        $stmt = $this->pdo->prepare(
-            'SELECT * FROM documents
-             WHERE lot_id = ? OR (reference_type = ? AND reference_id = ?)
-             ORDER BY id ASC'
-        );
-        $stmt->execute([$lotId, 'processing_lot', $lotId]);
-        $documents = [];
-        foreach ($stmt->fetchAll() as $document) {
-            $key = ((int) ($document['movement_id'] ?? 0)) . ':' . $document['document_type'];
-            $documents[$key][] = $document;
-        }
-        return $documents;
-    }
-
-    private function processingRegisterMeta(string $referenceType, int $referenceId): array
-    {
-        if ($referenceType === 'processing_lot') {
-            $stmt = $this->pdo->prepare(
-                'SELECT p.id, c.name AS partner_name, u.username
-                 FROM processing_lots p
-                 JOIN customers c ON c.id = p.customer_id
-                 JOIN users u ON u.id = p.created_by
-                 WHERE p.id = ?'
-            );
-            $stmt->execute([$referenceId]);
-            $row = $stmt->fetch();
-            return [
-                'partner' => $row['partner_name'] ?? 'Client',
-                'document' => $this->documentInfoForLot((int) ($row['id'] ?? $referenceId), 'PV-CUST'),
-                'lot_number' => $this->lotNumber((int) ($row['id'] ?? $referenceId)),
-                'lot_url' => 'index.php?page=lot_detail&lot_id=' . (int) ($row['id'] ?? $referenceId),
-                'operator' => $row['username'] ?? '-',
-            ];
-        }
-
-        if ($referenceType === 'processing_lot_movement') {
-            $stmt = $this->pdo->prepare(
-                'SELECT m.*, p.lot_number, c.name AS partner_name, u.username
-                 FROM processing_lot_movements m
-                 JOIN processing_lots p ON p.id = m.lot_id
-                 JOIN customers c ON c.id = p.customer_id
-                 JOIN users u ON u.id = m.created_by
-                 WHERE m.id = ?'
-            );
-            $stmt->execute([$referenceId]);
-            $row = $stmt->fetch();
-            $fallback = match ($row['movement_type'] ?? '') {
-                'EXCHANGE_WAX_WITH_CLIENT' => 'PV-FAG',
-                'RETURN_WAX_TO_CLIENT' => 'PV-RET',
-                default => 'PV',
-            };
-            return [
-                'partner' => $row['partner_name'] ?? 'Client',
-                'document' => $this->documentInfoForMovement($referenceId, $fallback),
-                'lot_number' => $row['lot_number'] ?? '-',
-                'lot_url' => 'index.php?page=lot_detail&lot_id=' . (int) ($row['lot_id'] ?? 0),
-                'operator' => $row['username'] ?? '-',
-            ];
-        }
-
-        if ($referenceType === 'factory_batch') {
-            $stmt = $this->pdo->prepare(
-                'SELECT b.*, p.name AS partner_name, u.username
-                 FROM factory_batches b
-                 JOIN processors p ON p.id = b.processor_id
-                 JOIN users u ON u.id = b.created_by
-                 WHERE b.id = ?'
-            );
-            $stmt->execute([$referenceId]);
-            $row = $stmt->fetch();
-            return [
-                'partner' => $row['partner_name'] ?? 'Fabrica',
-                'document' => $this->documentInfoForReference('factory_batch', $referenceId, 'AVIZ'),
-                'lot_number' => '',
-                'lot_url' => '',
-                'operator' => $row['username'] ?? '-',
-            ];
-        }
-
-        if ($referenceType === 'factory_buffer_adjustment') {
-            $stmt = $this->pdo->prepare(
-                'SELECT a.*, s.processor_id, p.name AS partner_name, u.username
-                 FROM factory_buffer_adjustments a
-                 JOIN stores s ON s.id = a.store_id
-                 LEFT JOIN processors p ON p.id = s.processor_id
-                 JOIN users u ON u.id = a.created_by
-                 WHERE a.id = ?'
-            );
-            $stmt->execute([$referenceId]);
-            $row = $stmt->fetch();
-            return [
-                'partner' => $row['partner_name'] ?? 'Fabrica',
-                'document' => $this->documentInfoForReference('factory_buffer_adjustment', $referenceId, 'NIR'),
-                'lot_number' => '',
-                'lot_url' => '',
-                'operator' => $row['username'] ?? '-',
-            ];
-        }
-
-        return [
-            'partner' => '-',
-            'document' => ['label' => '-', 'url' => ''],
-            'lot_number' => '',
-            'lot_url' => '',
-            'operator' => '-',
-        ];
-    }
-
-    private function documentInfoForLot(int $lotId, string $fallback): array
-    {
-        $stmt = $this->pdo->prepare(
-            'SELECT id, document_type, series, number
-             FROM documents
-             WHERE lot_id = ? AND document_type = ?
-             ORDER BY id DESC
-             LIMIT 1'
-        );
-        $stmt->execute([$lotId, $fallback]);
-        $document = $stmt->fetch();
-        return $this->documentInfo($document ?: null, $fallback);
-    }
-
-    private function documentInfoForMovement(int $movementId, string $fallback): array
-    {
-        $stmt = $this->pdo->prepare(
-            'SELECT id, document_type, series, number
-             FROM documents
-             WHERE movement_id = ?
-               AND document_type IN ("PV-CUST", "PV-FAG", "PV-RET", "NIR", "AVIZ")
-             ORDER BY id DESC
-             LIMIT 1'
-        );
-        $stmt->execute([$movementId]);
-        $document = $stmt->fetch();
-        return $this->documentInfo($document ?: null, $fallback);
-    }
-
-    private function documentInfoForReference(string $referenceType, int $referenceId, string $fallback): array
-    {
-        $stmt = $this->pdo->prepare(
-            'SELECT id, document_type, series, number
-             FROM documents
-             WHERE reference_type = ? AND reference_id = ?
-               AND document_type = ?
-             ORDER BY id DESC
-             LIMIT 1'
-        );
-        $stmt->execute([$referenceType, $referenceId, $fallback]);
-        $document = $stmt->fetch();
-        return $this->documentInfo($document ?: null, $fallback);
-    }
-
-    private function documentInfo(?array $document, string $fallback): array
-    {
-        if (!$document) {
-            return ['label' => $fallback, 'url' => ''];
-        }
-
-        return [
-            'label' => $this->formatDocumentLabel($document),
-            'url' => 'index.php?page=document_mock&document_id=' . (int) $document['id'],
-        ];
-    }
-
-    private function formatDocumentLabel(array $document): string
-    {
-        return trim($document['document_type'] . ' ' . $document['series'] . '-' . $document['number']);
-    }
-
-    private function lotNumber(int $lotId): string
-    {
-        $stmt = $this->pdo->prepare('SELECT lot_number FROM processing_lots WHERE id = ?');
-        $stmt->execute([$lotId]);
-        return (string) ($stmt->fetchColumn() ?: '');
-    }
 
     private function isAdmin(int $userId): bool
     {
