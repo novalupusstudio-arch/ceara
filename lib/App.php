@@ -2163,7 +2163,7 @@ final class App
 
     private function inventory(string $type, int $qty, int $storeId, string $refType, int $refId, string $notes): void
     {
-        (new \Ceara\Inventory\InventoryWriter($this->pdo))->record($type, $qty, $storeId, $refType, $refId, $notes);
+        $this->inventoryService()->record($type, $qty, $storeId, $refType, $refId, $notes);
     }
 
     private function processingMovement(int $lotId, string $type, int $wax, int $foundation, int $serviceValue, string $notes, int $userId): int
@@ -2554,30 +2554,22 @@ final class App
 
     private function sumInventory(string $type): int
     {
-        $stmt = $this->pdo->prepare('SELECT COALESCE(SUM(qty_g), 0) FROM inventory_transactions WHERE movement_type = ?');
-        $stmt->execute([$type]);
-        return (int) $stmt->fetchColumn();
+        return $this->inventoryService()->sum($type);
     }
 
     private function sumInventoryForStore(string $type, int $storeId): int
     {
-        $stmt = $this->pdo->prepare('SELECT COALESCE(SUM(qty_g), 0) FROM inventory_transactions WHERE movement_type = ? AND store_id = ?');
-        $stmt->execute([$type, $storeId]);
-        return (int) $stmt->fetchColumn();
+        return $this->inventoryService()->sumForStore($type, $storeId);
     }
 
     private function sumInventoryForStoreUntil(string $type, int $storeId, string $dateTime, bool $inclusive): int
     {
-        $operator = $inclusive ? '<=' : '<';
-        $stmt = $this->pdo->prepare(
-            "SELECT COALESCE(SUM(qty_g), 0)
-             FROM inventory_transactions
-             WHERE movement_type = ?
-               AND store_id = ?
-               AND created_at $operator ?"
-        );
-        $stmt->execute([$type, $storeId, $dateTime]);
-        return (int) $stmt->fetchColumn();
+        return $this->inventoryService()->sumForStoreUntil($type, $storeId, $dateTime, $inclusive);
+    }
+
+    private function inventoryService(): \Ceara\Inventory\InventoryService
+    {
+        return new \Ceara\Inventory\InventoryService($this->pdo);
     }
 
     private function normalizeDate(string $date): string
