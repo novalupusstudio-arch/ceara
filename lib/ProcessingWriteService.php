@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Ceara;
 
-use Ceara\Documents\DocumentIssuer;
 use Ceara\Inventory\InventoryService;
 use PDO;
 use RuntimeException;
@@ -19,6 +18,7 @@ final class ProcessingWriteService
         private PDO $pdo,
         private InventoryService $inventory,
         private CustomerService $customers,
+        private DocumentService $documents,
         private $documentRenderer
     ) {
     }
@@ -61,7 +61,7 @@ final class ProcessingWriteService
             $this->inventory->record('wax_custody', $gross, (int) $data['store_id'], 'processing_lot', $lotId, 'Ceara client in custodie');
             $movementId = $this->processingMovement($lotId, 'RECEIVE_WAX_FROM_CLIENT', $gross, 0, 0, trim((string) ($data['notes'] ?? '')), $userId);
             $this->recordProcessingLotStatus($lotId, $status, $userId);
-            $this->issueDocument('PV-CUST', 'processing_lot_movement', $movementId, (int) $data['store_id'], 'issued', 'PV primire ceara in custodie', [
+            $this->documents->issue('PV-CUST', 'processing_lot_movement', $movementId, (int) $data['store_id'], 'issued', 'PV primire ceara in custodie', [
                 'lot_id' => $lotId,
                 'movement_id' => $movementId,
                 'created_by' => $userId,
@@ -131,7 +131,7 @@ final class ProcessingWriteService
         try {
             $movementId = $this->processingMovement($lotId, 'RETURN_WAX_TO_CLIENT', $wax, 0, 0, $notes, $userId);
             $this->inventory->record('wax_custody', -$wax, (int) $summary['lot']['store_id'], 'processing_lot_movement', $movementId, 'Ceara returnata client');
-            $this->issueDocument('PV-RET', 'processing_lot_movement', $movementId, (int) $summary['lot']['store_id'], 'draft', 'PV retur ceara client', [
+            $this->documents->issue('PV-RET', 'processing_lot_movement', $movementId, (int) $summary['lot']['store_id'], 'draft', 'PV retur ceara client', [
                 'lot_id' => $lotId,
                 'movement_id' => $movementId,
                 'created_by' => $userId,
@@ -186,7 +186,7 @@ final class ProcessingWriteService
                 $adjustmentId,
                 'Aviz buffer fabrica ' . strtoupper($type) . ' ' . $avizNumber
             );
-            $this->issueDocument('NIR', 'factory_buffer_adjustment', $adjustmentId, $storeId, 'issued', 'NIR buffer fabrica pentru aviz ' . $avizNumber, [
+            $this->documents->issue('NIR', 'factory_buffer_adjustment', $adjustmentId, $storeId, 'issued', 'NIR buffer fabrica pentru aviz ' . $avizNumber, [
                 'created_by' => $userId,
             ]);
             $this->logAudit($userId, 'FACTORY_BUFFER_' . strtoupper($type), 'factory_buffer_adjustments', $adjustmentId, null, $avizNumber);
@@ -222,7 +222,7 @@ final class ProcessingWriteService
             $this->pdo->prepare('UPDATE processing_lots SET status = ? WHERE id = ?')->execute([$newStatus, $lotId]);
             $this->recordProcessingLotStatus($lotId, $newStatus, $userId);
             foreach ($map[$action]['docs'] as $type) {
-                $this->issueDocument($type, 'processing_lot', $lotId, (int) $lot['store_id'], 'mock', 'Document generat mock');
+                $this->documents->issue($type, 'processing_lot', $lotId, (int) $lot['store_id'], 'mock', 'Document generat mock');
             }
             $this->logAudit($userId, 'PROCESSING_' . strtoupper($action), 'processing_lots', $lotId, $lot['status'], $newStatus);
             $this->pdo->commit();
@@ -335,7 +335,7 @@ final class ProcessingWriteService
             if ($totalWax > 0) {
                 $this->inventory->record('wax_custody', -$totalWax, (int) $selectedLots[0]['lot']['store_id'], 'factory_batch', $batchId, 'Ceara trimisa la procesator');
                 $this->inventory->record('foundation_operational', $totalFoundation, (int) $selectedLots[0]['lot']['store_id'], 'factory_batch', $batchId, 'Faguri primiti de la procesator');
-                $this->issueDocument('AVIZ', 'factory_batch', $batchId, (int) $selectedLots[0]['lot']['store_id'], 'issued', 'Aviz catre procesator', [
+                $this->documents->issue('AVIZ', 'factory_batch', $batchId, (int) $selectedLots[0]['lot']['store_id'], 'issued', 'Aviz catre procesator', [
                     'factory_batch_id' => $batchId,
                     'created_by' => $userId,
                 ]);
@@ -491,20 +491,6 @@ final class ProcessingWriteService
         }
 
         return $processor;
-    }
-
-    private function issueDocument(string $type, string $referenceType, int $referenceId, int $storeId, string $status, string $notes, array $links = []): int
-    {
-        return (new DocumentIssuer($this->pdo))->issue(
-            $type,
-            $referenceType,
-            $referenceId,
-            $storeId,
-            $status,
-            $notes,
-            $links,
-            $this->documentRenderer
-        );
     }
 
     private function recordProcessingLotStatus(int $lotId, string $status, int $userId): void

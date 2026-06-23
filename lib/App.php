@@ -441,6 +441,7 @@ final class App
             $this->pdo,
             $this->inventoryService(),
             $this->customerService(),
+            $this->documentService(),
             fn (int $documentId) => $this->renderDocumentFile($documentId)
         );
     }
@@ -464,6 +465,15 @@ final class App
             $this->pdo,
             $this->inventoryService(),
             $this->supplierService(),
+            $this->documentService(),
+            fn (int $documentId) => $this->renderDocumentFile($documentId)
+        );
+    }
+
+    private function documentService(): \Ceara\DocumentService
+    {
+        return new \Ceara\DocumentService(
+            $this->pdo,
             fn (int $documentId) => $this->renderDocumentFile($documentId)
         );
     }

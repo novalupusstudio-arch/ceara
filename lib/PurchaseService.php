@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Ceara;
 
-use Ceara\Documents\DocumentIssuer;
 use Ceara\Inventory\InventoryService;
 use PDO;
 use RuntimeException;
@@ -19,6 +18,7 @@ final class PurchaseService
         private PDO $pdo,
         private InventoryService $inventory,
         private SupplierService $suppliers,
+        private DocumentService $documents,
         private $documentRenderer
     ) {
     }
@@ -166,10 +166,10 @@ final class PurchaseService
             $newStatus = $next[$lot['status']];
             $this->pdo->prepare('UPDATE purchase_lots SET status = ? WHERE id = ?')->execute([$newStatus, $lotId]);
             if ($newStatus === 'Predat Procesator') {
-                $this->issueDocument('AVIZ', 'purchase_lot', $lotId, (int) $lot['store_id'], 'mock', 'Aviz procesator');
+                $this->documents->issue('AVIZ', 'purchase_lot', $lotId, (int) $lot['store_id'], 'mock', 'Aviz procesator');
             }
             if ($newStatus === 'Receptionat Faguri') {
-                $this->issueDocument('NIR', 'purchase_lot', $lotId, (int) $lot['store_id'], 'mock', 'NIR produse finite');
+                $this->documents->issue('NIR', 'purchase_lot', $lotId, (int) $lot['store_id'], 'mock', 'NIR produse finite');
                 $this->inventory->record('foundation_merchandise', (int) $lot['foundation_g'], (int) $lot['store_id'], 'purchase_lot', $lotId, 'Faguri marfa receptionati');
             }
             $this->logAudit($userId, 'PURCHASE_ADVANCE', 'purchase_lots', $lotId, $lot['status'], $newStatus);
@@ -340,20 +340,6 @@ final class PurchaseService
              ORDER BY e.id DESC
              LIMIT 100'
         )->fetchAll();
-    }
-
-    private function issueDocument(string $type, string $referenceType, int $referenceId, int $storeId, string $status, string $notes, array $links = []): int
-    {
-        return (new DocumentIssuer($this->pdo))->issue(
-            $type,
-            $referenceType,
-            $referenceId,
-            $storeId,
-            $status,
-            $notes,
-            $links,
-            $this->documentRenderer
-        );
     }
 
     private function userPrimaryStore(int $userId): ?array
