@@ -2432,20 +2432,7 @@ final class App
 
     private function buildPdfFromHtml(string $html): string
     {
-        if (!class_exists(\Dompdf\Dompdf::class)) {
-            throw new RuntimeException('Dompdf nu este instalat. Ruleaza composer install.');
-        }
-
-        $options = new \Dompdf\Options();
-        $options->set('isRemoteEnabled', false);
-        $options->set('defaultFont', 'DejaVu Sans');
-
-        $dompdf = new \Dompdf\Dompdf($options);
-        $dompdf->loadHtml($html, 'UTF-8');
-        $dompdf->setPaper('A4', 'portrait');
-        $dompdf->render();
-
-        return $dompdf->output();
+        return (new \Ceara\Documents\PdfRenderer())->renderA4Portrait($html);
     }
 
     private function documentRelativePath(array $doc, array $store, string $extension): string
