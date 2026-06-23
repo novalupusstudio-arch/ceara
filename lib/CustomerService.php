@@ -194,6 +194,162 @@ final class CustomerService
         return $this->defaultProcessor();
     }
 
+    public function resolveProcessingCustomer(array $data): array
+    {
+        $customerType = $data['customer_type'] === 'PJ' ? 'PJ' : 'PF';
+        $existingCustomerId = (int) ($data['existing_customer_id'] ?? 0);
+        $isNewCustomer = !empty($data['force_new_customer']);
+
+        if ($existingCustomerId > 0 && !$isNewCustomer) {
+            $existing = ($this->find)('customers', $existingCustomerId);
+            if (!$existing) {
+                throw new RuntimeException('Clientul selectat nu exista.');
+            }
+
+            $customerPayload = [
+                'customer_type' => $customerType,
+                'name' => $customerType === 'PJ'
+                    ? trim((string) ($data['customer_name_pj'] ?? $data['customer_name']))
+                    : trim((string) $data['customer_name']),
+                'phone' => $customerType === 'PJ'
+                    ? trim((string) ($data['customer_phone_pj'] ?? $data['customer_phone']))
+                    : trim((string) $data['customer_phone']),
+                'address' => trim((string) ($data['customer_address'] ?? '')),
+                'identifier' => $customerType === 'PF'
+                    ? trim((string) ($data['customer_identifier'] ?? ''))
+                    : trim((string) ($data['customer_identifier'] ?? $data['customer_cui'] ?? '')),
+                'cui' => trim((string) ($data['customer_cui'] ?? '')),
+                'representative' => trim((string) ($data['customer_representative'] ?? '')),
+            ] + $this->customerLocationPayload($data);
+            $this->updateCustomer($existingCustomerId, $customerPayload);
+            $updated = ($this->find)('customers', $existingCustomerId);
+            if (!$updated) {
+                throw new RuntimeException('Clientul nu a putut fi actualizat.');
+            }
+            return $updated;
+        }
+
+        $customerId = $this->upsertCustomer([
+            'customer_type' => $customerType,
+            'name' => $customerType === 'PJ'
+                ? trim((string) ($data['customer_name_pj'] ?? $data['customer_name']))
+                : trim((string) $data['customer_name']),
+            'phone' => $customerType === 'PJ'
+                ? trim((string) ($data['customer_phone_pj'] ?? $data['customer_phone']))
+                : trim((string) $data['customer_phone']),
+            'address' => $customerType === 'PJ'
+                ? trim((string) ($data['customer_address_pj'] ?? $data['customer_address']))
+                : trim((string) $data['customer_address']),
+            'identifier' => $customerType === 'PF'
+                ? trim((string) ($data['customer_identifier'] ?? ''))
+                : trim((string) ($data['customer_identifier'] ?? $data['customer_cui'] ?? '')),
+            'cui' => trim((string) ($data['customer_cui'] ?? '')),
+            'representative' => trim((string) ($data['customer_representative'] ?? '')),
+            'known_customer' => !empty($data['known_customer']),
+        ] + $this->customerLocationPayload($data));
+
+        $created = ($this->find)('customers', $customerId);
+        if (!$created) {
+            throw new RuntimeException('Clientul nu a putut fi creat.');
+        }
+
+        return $created;
+    }
+
+    private function upsertCustomer(array $customer): int
+    {
+        if ($customer['name'] === '' || $customer['phone'] === '' || $customer['address'] === '') {
+            throw new RuntimeException('Numele, telefonul si adresa sunt obligatorii.');
+        }
+
+        if ($customer['customer_type'] === 'PJ' && ($customer['identifier'] === '' || $customer['representative'] === '')) {
+            throw new RuntimeException('Pentru PJ sunt obligatorii CUI-ul si reprezentantul.');
+        }
+
+        $stmt = $this->pdo->prepare(
+            'INSERT INTO customers
+            (customer_type, name, phone, address, identifier, cui, representative, county_code, county_name, locality_siruta, locality_name, postal_code, registry_number, legal_form, vat_status, external_source, external_checked_at, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        );
+        $stmt->execute([
+            $customer['customer_type'],
+            $customer['name'],
+            $customer['phone'],
+            $customer['address'],
+            $customer['identifier'],
+            $customer['cui'],
+            $customer['representative'],
+            $customer['county_code'],
+            $customer['county_name'],
+            $customer['locality_siruta'],
+            $customer['locality_name'],
+            $customer['postal_code'],
+            $customer['registry_number'],
+            $customer['legal_form'],
+            $customer['vat_status'],
+            $customer['external_source'],
+            $customer['external_checked_at'],
+            date('Y-m-d H:i:s'),
+        ]);
+
+        return (int) $this->pdo->lastInsertId();
+    }
+
+    private function updateCustomer(int $customerId, array $customer): void
+    {
+        if ($customer['name'] === '' || $customer['phone'] === '' || $customer['address'] === '') {
+            throw new RuntimeException('Numele, telefonul si adresa sunt obligatorii.');
+        }
+
+        if ($customer['customer_type'] === 'PJ' && ($customer['identifier'] === '' || $customer['representative'] === '')) {
+            throw new RuntimeException('Pentru PJ sunt obligatorii CUI-ul si reprezentantul.');
+        }
+
+        $stmt = $this->pdo->prepare(
+            'UPDATE customers
+             SET customer_type = ?, name = ?, phone = ?, address = ?, identifier = ?, cui = ?, representative = ?,
+                 county_code = ?, county_name = ?, locality_siruta = ?, locality_name = ?, postal_code = ?,
+                 registry_number = ?, legal_form = ?, vat_status = ?, external_source = ?, external_checked_at = ?
+             WHERE id = ?'
+        );
+        $stmt->execute([
+            $customer['customer_type'],
+            $customer['name'],
+            $customer['phone'],
+            $customer['address'],
+            $customer['identifier'],
+            $customer['cui'],
+            $customer['representative'],
+            $customer['county_code'],
+            $customer['county_name'],
+            $customer['locality_siruta'],
+            $customer['locality_name'],
+            $customer['postal_code'],
+            $customer['registry_number'],
+            $customer['legal_form'],
+            $customer['vat_status'],
+            $customer['external_source'],
+            $customer['external_checked_at'],
+            $customerId,
+        ]);
+    }
+
+    private function customerLocationPayload(array $data): array
+    {
+        return [
+            'county_code' => trim((string) ($data['customer_county_code'] ?? '')),
+            'county_name' => trim((string) ($data['customer_county_name'] ?? '')),
+            'locality_siruta' => (int) ($data['customer_locality_siruta'] ?? 0),
+            'locality_name' => trim((string) ($data['customer_locality_name'] ?? '')),
+            'postal_code' => trim((string) ($data['customer_postal_code'] ?? '')),
+            'registry_number' => trim((string) ($data['customer_registry_number'] ?? '')),
+            'legal_form' => trim((string) ($data['customer_legal_form'] ?? '')),
+            'vat_status' => trim((string) ($data['customer_vat_status'] ?? '')),
+            'external_source' => trim((string) ($data['customer_external_source'] ?? '')),
+            'external_checked_at' => trim((string) ($data['customer_external_checked_at'] ?? '')),
+        ];
+    }
+
     private function matchSirutaLocation(string $countyName, string $localityText, string $postalCode = ''): array
     {
         $empty = [

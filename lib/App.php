@@ -440,6 +440,7 @@ final class App
         return new \Ceara\ProcessingWriteService(
             $this->pdo,
             $this->inventoryService(),
+            $this->customerService(),
             fn (int $documentId) => $this->renderDocumentFile($documentId)
         );
     }
