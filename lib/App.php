@@ -2418,16 +2418,12 @@ final class App
 
     private function renderTemplate(string $html, array $variables): string
     {
-        $replace = [];
-        foreach ($variables as $key => $value) {
-            $replace['[' . $key . ']'] = (string) $value;
-        }
-        return strtr($html, $replace);
+        return (new \Ceara\Documents\TemplateRenderer())->render($html, $variables);
     }
 
     private function wrapDocumentHtml(string $body): string
     {
-        return '<!doctype html><html lang="ro"><head><meta charset="utf-8"><title>Document</title></head><body>' . $body . '</body></html>';
+        return (new \Ceara\Documents\TemplateRenderer())->wrapDocument($body);
     }
 
     private function buildPdfFromHtml(string $html): string
