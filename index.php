@@ -18,6 +18,7 @@ require __DIR__ . '/lib/Http/PostActionDispatcher.php';
 require __DIR__ . '/lib/ProcessingService.php';
 require __DIR__ . '/lib/ProcessingWriteService.php';
 require __DIR__ . '/lib/ProcessingDocumentService.php';
+require __DIR__ . '/lib/SettingsService.php';
 
 $config = require __DIR__ . '/config/config.php';
 $db = new Database($config);
