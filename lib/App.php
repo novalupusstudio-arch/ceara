@@ -916,7 +916,7 @@ final class App
         }
 
         $fgoConfig = $this->fgoConfig((int) $doc['store_id']);
-        $fgo = new FgoClient($fgoConfig);
+        $fgo = new \Ceara\Integrations\FgoClient($fgoConfig);
         if (!$fgo->enabled()) {
             throw new RuntimeException('Integrarea FGO nu este activa.');
         }
@@ -1027,7 +1027,7 @@ final class App
             throw new RuntimeException('Documentul de bon nu exista.');
         }
 
-        $exporter = new FiscalWireExporter($this->config['fiscalwire'] ?? []);
+        $exporter = new \Ceara\Integrations\FiscalWireExporter($this->config['fiscalwire'] ?? []);
         if (!$exporter->enabled()) {
             throw new RuntimeException('Integrarea FiscalWire nu este activa.');
         }

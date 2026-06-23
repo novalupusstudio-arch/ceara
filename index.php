@@ -13,8 +13,6 @@ require __DIR__ . '/lib/autoload.php';
 require __DIR__ . '/lib/helpers.php';
 require __DIR__ . '/lib/Database.php';
 require __DIR__ . '/lib/Auth.php';
-require __DIR__ . '/lib/FgoClient.php';
-require __DIR__ . '/lib/FiscalWireExporter.php';
 require __DIR__ . '/lib/App.php';
 
 $config = require __DIR__ . '/config/config.php';
