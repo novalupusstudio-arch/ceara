@@ -34,6 +34,7 @@ The application is being split incrementally to reduce large-file edits and cont
 Current modular folders:
 
 - `lib/Integrations/`: FGO and FiscalWire integration clients.
+- `lib/Http/`: request/action dispatchers.
 - `lib/Documents/`: document issuing, file handling, PDF/template rendering and variable building.
 - `lib/Inventory/`: inventory ledger writer, stock balances and register rows.
 

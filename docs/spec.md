@@ -27,6 +27,7 @@ New PHP classes should use the `Ceara\` namespace and live under `lib/`, loaded 
 Current module folders:
 
 - `Ceara\Integrations` for external systems.
+- `Ceara\Http` for request and action dispatchers.
 - `Ceara\Documents` for document issuing, generated files, PDF/template rendering and variable building.
 - `Ceara\Inventory` for inventory ledger writing, balances and register row queries.
 

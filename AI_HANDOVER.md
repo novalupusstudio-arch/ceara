@@ -58,6 +58,7 @@ The project is being refactored incrementally away from one large `App.php`.
 Current new modular folders under `lib/`:
 
 - `lib/Integrations/` - external integrations (`FgoClient`, `FiscalWireExporter`)
+- `lib/Http/` - request/action dispatchers (`PostActionDispatcher`)
 - `lib/Documents/` - document flow helpers (`DocumentFiles`, `DocumentIssuer`, `DocumentGenerator`, `DocumentVariablesBuilder`, `PdfRenderer`, `TemplateRenderer`)
 - `lib/Inventory/` - stock ledger helpers (`InventoryService`, `InventoryWriter`)
 
@@ -256,7 +257,7 @@ For an already initialized production database, do not run the full reset script
 Refactoring:
 
 - Next low-risk target: move FiscalWire receipt storage/path handling out of `App.php`.
-- Next medium-risk target: split POST actions from `index.php` into small action handlers/controllers.
+- Next medium-risk target: split remaining GET page assembly from `index.php` into request/view helpers, then split processing and purchase services.
 - Larger target after that: split processing and purchase business logic into separate services/repositories.
 
 Processing:

@@ -70,6 +70,7 @@ The app is plain PHP, but new code should use the `Ceara\` namespaced autoload f
 Current extracted modules:
 
 - `lib/Integrations/` - FGO and FiscalWire
+- `lib/Http/` - request/action dispatchers
 - `lib/Documents/` - document issuing, files, PDF/template rendering and variable building
 - `lib/Inventory/` - inventory transaction writer, balances and register rows
 
