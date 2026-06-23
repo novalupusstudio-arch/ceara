@@ -317,7 +317,8 @@ final class App
             return null;
         }
 
-        return $this->wrapDocumentHtml($this->renderTemplate((string) $template['body_html'], $this->sampleTemplateVariables()));
+        $renderer = new \Ceara\Documents\TemplateRenderer();
+        return $renderer->wrapDocument($renderer->render((string) $template['body_html'], $this->sampleTemplateVariables()));
     }
 
     public function documentPdfById(int $documentId): ?string
@@ -2066,50 +2067,11 @@ final class App
 
     private function renderDocumentFile(int $documentId): void
     {
-        $doc = $this->documentById($documentId);
-        if (!$doc) {
-            return;
-        }
-
-        $template = $this->documentTemplateByCode((string) $doc['document_type']);
-        if (!$template) {
-            return;
-        }
-
-        $store = $this->find('stores', (int) $doc['store_id']);
-        if (!$store) {
-            return;
-        }
-
-        $oldRelativePath = (string) ($doc['file_path'] ?? '');
-        $html = $this->wrapDocumentHtml($this->renderTemplate(
-            (string) $template['body_html'],
-            $this->documentVariables($doc, $store)
-        ));
-        $relativePath = $this->documentRelativePath($doc, $store, 'pdf');
-        $absolutePath = $this->storagePath($relativePath);
-        $dir = dirname($absolutePath);
-        if (!is_dir($dir)) {
-            mkdir($dir, 0775, true);
-        }
-
-        file_put_contents($absolutePath, $this->buildPdfFromHtml($html));
-        $this->pdo->prepare('UPDATE documents SET file_path = ? WHERE id = ?')
-            ->execute([$relativePath, $documentId]);
-        $this->removeReplacedHtmlDocument($oldRelativePath, $relativePath);
-    }
-
-    private function removeReplacedHtmlDocument(string $oldRelativePath, string $newRelativePath): void
-    {
-        $this->documentFiles()->removeReplacedHtmlDocument($oldRelativePath, $newRelativePath);
-    }
-
-    private function documentTemplateByCode(string $code): ?array
-    {
-        $stmt = $this->pdo->prepare('SELECT * FROM document_templates WHERE code = ? AND active = 1 LIMIT 1');
-        $stmt->execute([$code]);
-        $template = $stmt->fetch();
-        return $template ?: null;
+        $this->documentGenerator()->renderFile(
+            $documentId,
+            fn (array $doc, array $store) => $this->documentVariables($doc, $store),
+            fn (array $doc) => $this->formatDocumentLabel($doc)
+        );
     }
 
     private function documentVariables(array $doc, array $store): array
@@ -2354,26 +2316,6 @@ final class App
         return implode('', $rows);
     }
 
-    private function renderTemplate(string $html, array $variables): string
-    {
-        return (new \Ceara\Documents\TemplateRenderer())->render($html, $variables);
-    }
-
-    private function wrapDocumentHtml(string $body): string
-    {
-        return (new \Ceara\Documents\TemplateRenderer())->wrapDocument($body);
-    }
-
-    private function buildPdfFromHtml(string $html): string
-    {
-        return (new \Ceara\Documents\PdfRenderer())->renderA4Portrait($html);
-    }
-
-    private function documentRelativePath(array $doc, array $store, string $extension): string
-    {
-        return $this->documentFiles()->relativePath($doc, $store, $this->formatDocumentLabel($doc), $extension);
-    }
-
     private function safePathPart(string $value): string
     {
         $safe = preg_replace('/[^A-Za-z0-9._-]+/', '_', trim($value));
@@ -2388,6 +2330,16 @@ final class App
     private function documentFiles(): \Ceara\Documents\DocumentFiles
     {
         return new \Ceara\Documents\DocumentFiles($this->pdo, dirname(__DIR__) . '/storage');
+    }
+
+    private function documentGenerator(): \Ceara\Documents\DocumentGenerator
+    {
+        return new \Ceara\Documents\DocumentGenerator(
+            $this->pdo,
+            $this->documentFiles(),
+            new \Ceara\Documents\TemplateRenderer(),
+            new \Ceara\Documents\PdfRenderer()
+        );
     }
 
     private function inventory(string $type, int $qty, int $storeId, string $refType, int $refId, string $notes): void
