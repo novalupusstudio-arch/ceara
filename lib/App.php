@@ -450,12 +450,10 @@ final class App
     {
         return new \Ceara\ProcessingDocumentService(
             $this->pdo,
-            $this->config,
-            fn (int $documentId) => $this->documentById($documentId),
-            fn (string $type, string $referenceType, int $referenceId, int $storeId, string $status, string $notes, array $links = []) => $this->document($type, $referenceType, $referenceId, $storeId, $status, $notes, $links),
-            fn (int $documentId) => $this->renderDocumentFile($documentId),
-            fn (int $storeId) => $this->find('stores', $storeId),
-            fn () => $this->companySettings()
+            $this->documentService(),
+            $this->fgoService(),
+            $this->fiscalWireService(),
+            fn (int $documentId) => $this->renderDocumentFile($documentId)
         );
     }
 
@@ -475,6 +473,26 @@ final class App
         return new \Ceara\DocumentService(
             $this->pdo,
             fn (int $documentId) => $this->renderDocumentFile($documentId)
+        );
+    }
+
+    private function fgoService(): \Ceara\FgoService
+    {
+        return new \Ceara\FgoService(
+            $this->pdo,
+            $this->config,
+            fn (int $documentId) => $this->documentById($documentId),
+            fn () => $this->companySettings()
+        );
+    }
+
+    private function fiscalWireService(): \Ceara\FiscalWireService
+    {
+        return new \Ceara\FiscalWireService(
+            $this->pdo,
+            $this->config,
+            fn (int $documentId) => $this->documentById($documentId),
+            fn (int $storeId) => $this->find('stores', $storeId)
         );
     }
 
