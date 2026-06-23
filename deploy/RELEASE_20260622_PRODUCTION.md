@@ -21,7 +21,7 @@
 - `storage/`, `uploads/`, loguri si fisiere temporare
 - configurari locale/dev: `config/local.php`, `config/fgo.local.php`, `config/xampp-target.local.txt`, `.env*`
 - `composer.phar`
-- dump-uri/dev data vechi: `db/ceara-current.xml`, `db/ceara-reset.sql`
+- dump-uri/dev data vechi: eliminate din repo
 
 ## Reset baza de date productie
 
