@@ -1,5 +1,5 @@
 <?php
-$stores = $data['stores'] ?? [];
+$store = $data['store'] ?? [];
 $adjustments = $data['adjustments'] ?? [];
 $currentStock = (int) ($data['current_stock_g'] ?? 0);
 $today = (string) ($data['today'] ?? date('Y-m-d'));
@@ -58,11 +58,7 @@ $today = (string) ($data['today'] ?? date('Y-m-d'));
 
         <label>
             Gestiune
-            <select name="store_id">
-                <?php foreach ($stores as $store): ?>
-                    <option value="<?= h((string) $store['id']) ?>"><?= h($store['name']) ?></option>
-                <?php endforeach; ?>
-            </select>
+            <input value="<?= h((string) ($store['name'] ?? '')) ?>" readonly>
         </label>
 
         <label class="wide">

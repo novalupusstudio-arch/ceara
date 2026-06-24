@@ -6,6 +6,11 @@ Settings are admin-only.
 
 Operators should not configure the app. If configuration is missing, they should only see the operational error and ask admin to fix it.
 
+Important bootstrap rule:
+
+- after a clean `init-production.sql`, `admin` may exist without assigned gestiune
+- login must still succeed so the admin can finish setup
+
 ## Company Data
 
 - company name
@@ -93,6 +98,19 @@ Generated PDFs are saved under:
 6. `Creare useri`
 7. `Template documente`
 8. `Schimba parola`
+
+## Environment-Specific DB Config Files
+
+- source repo local dev config:
+  - `config/local.php`
+- DEV runtime:
+  - `D:\xampp\htdocs\ceara\config\local.php`
+- STAGE runtime:
+  - `D:\xampp\htdocs\ceara_stage\config\local.php`
+- PROD build source:
+  - `deploy/local/config.php`
+- PROD runtime:
+  - `../ceara/config/local.php`
 
 ## Users And Permissions
 

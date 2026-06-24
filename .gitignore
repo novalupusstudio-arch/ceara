@@ -22,6 +22,7 @@ config/local.php
 config/fgo.local.php
 config/secrets.php
 config/xampp-target.local.txt
+config/xampp-stage-target.local.txt
 deploy/local/
 deploy/output/
 

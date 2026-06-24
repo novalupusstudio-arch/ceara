@@ -23,24 +23,25 @@ final class PurchaseService
     ) {
     }
 
-    public function purchaseLots(): array
+    public function purchaseLots(int $userId): array
     {
-        return $this->pdo->query(
+        $store = $this->requireUserPrimaryStore($userId);
+        $stmt = $this->pdo->prepare(
             'SELECT p.*, s.name AS supplier_name, s.phone AS supplier_phone, s.identifier AS supplier_identifier,
                     s.cui AS supplier_cui, s.locality_name AS supplier_locality, st.name AS store_name
              FROM purchase_lots p
              JOIN suppliers s ON s.id = p.supplier_id
              JOIN stores st ON st.id = p.store_id
+             WHERE p.store_id = ?
              ORDER BY p.id DESC'
-        )->fetchAll();
+        );
+        $stmt->execute([(int) $store['id']]);
+        return $stmt->fetchAll();
     }
 
     public function purchaseRegisterData(int $userId, string $dateStart = '', string $dateEnd = ''): array
     {
-        $store = $this->userPrimaryStore($userId);
-        if (!$store) {
-            throw new RuntimeException('Utilizatorul nu are o gestiune alocata.');
-        }
+        $store = $this->requireUserPrimaryStore($userId);
 
         $dateStart = $this->normalizeDate($dateStart) ?: date('Y-m-01');
         $dateEnd = $this->normalizeDate($dateEnd) ?: date('Y-m-d');
@@ -63,21 +64,18 @@ final class PurchaseService
             'opening_g' => $this->sumInventoryForStoreUntil('wax_purchased', (int) $store['id'], $periodStart, false),
             'closing_g' => $this->sumInventoryForStoreUntil('wax_purchased', (int) $store['id'], $periodEnd, true),
             'rows' => $rows,
-            'lots' => $this->purchaseLots(),
+            'lots' => $this->purchaseLots($userId),
         ];
     }
 
     public function purchaseExitData(int $userId): array
     {
-        $store = $this->userPrimaryStore($userId);
-        if (!$store) {
-            throw new RuntimeException('Utilizatorul nu are o gestiune alocata.');
-        }
+        $store = $this->requireUserPrimaryStore($userId);
 
         return [
             'store' => $store,
             'stock_g' => $this->sumInventoryForStore('wax_purchased', (int) $store['id']),
-            'exits' => $this->purchaseWaxExits(),
+            'exits' => $this->purchaseWaxExits((int) $store['id']),
         ];
     }
 
@@ -146,9 +144,13 @@ final class PurchaseService
 
     public function advancePurchaseLot(int $lotId, int $userId): void
     {
+        $store = $this->requireUserPrimaryStore($userId);
         $lot = $this->find('purchase_lots', $lotId);
         if (!$lot) {
             throw new RuntimeException('Achizitia nu exista.');
+        }
+        if ((int) $lot['store_id'] !== (int) $store['id']) {
+            throw new RuntimeException('Achizitia nu apartine gestiunii utilizatorului.');
         }
 
         $next = [
@@ -339,16 +341,19 @@ final class PurchaseService
         ];
     }
 
-    private function purchaseWaxExits(): array
+    private function purchaseWaxExits(int $storeId): array
     {
-        return $this->pdo->query(
+        $stmt = $this->pdo->prepare(
             'SELECT e.*, s.name AS store_name, u.username
              FROM purchase_wax_exits e
              JOIN stores s ON s.id = e.store_id
              JOIN users u ON u.id = e.created_by
+             WHERE e.store_id = ?
              ORDER BY e.id DESC
              LIMIT 100'
-        )->fetchAll();
+        );
+        $stmt->execute([$storeId]);
+        return $stmt->fetchAll();
     }
 
     private function userPrimaryStore(int $userId): ?array
@@ -366,6 +371,16 @@ final class PurchaseService
         $store = $stmt->fetch();
 
         return $store ?: null;
+    }
+
+    private function requireUserPrimaryStore(int $userId): array
+    {
+        $store = $this->userPrimaryStore($userId);
+        if (!$store) {
+            throw new RuntimeException('Utilizatorul nu are o gestiune alocata.');
+        }
+
+        return $store;
     }
 
     private function sumInventoryForStore(string $type, int $storeId): int

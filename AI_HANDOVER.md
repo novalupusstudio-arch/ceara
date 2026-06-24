@@ -5,152 +5,182 @@
 Project: `Ceara`
 
 - stack: plain PHP + MySQL
-- runtime: XAMPP
-- source path on this machine: `E:\NovaLupus\ceara`
-- local deploy target on this machine: `E:\XAMP\htdocs\ceara`
-- local URL: `http://localhost/ceara/`
-- git remote: `https://github.com/novalupusstudio-arch/ceara.git`
+- runtime: XAMPP locally, Linux hosting in production
+- source repo: `D:\Novalupusstudio\ceara`
+- DEV deploy target: `D:\xampp\htdocs\ceara`
+- STAGE deploy target: `D:\xampp\htdocs\ceara_stage`
+- current app version: `1.2.012`
 - branch: `main`
-- current app version: `1.2.000`
+- remote: `https://github.com/novalupusstudio-arch/ceara.git`
 
-The app is already beyond first MVP and now runs two separate operational domains:
+Production is now live and must be treated as a real environment with preserved data from this point onward.
 
-1. processing customer wax in custody
-2. purchase stock for company-owned wax
+## Environment Map
 
-The repo has active service extraction. Do not move business logic back into `App.php`.
+### CODE
 
-## What Is Already Implemented
+- path: `D:\Novalupusstudio\ceara`
+- this is the only source of truth for code changes
+
+### DEV
+
+- path: `D:\xampp\htdocs\ceara`
+- URL: `http://localhost/ceara/`
+- DB: `ceara`
+- config DB file: `D:\xampp\htdocs\ceara\config\local.php`
+
+### STAGE
+
+- path: `D:\xampp\htdocs\ceara_stage`
+- URL: `http://localhost/ceara_stage/`
+- DB: `ceara_stage`
+- config DB file: `D:\xampp\htdocs\ceara_stage\config\local.php`
+- purpose: production-like validation before real deploy
+
+### PROD
+
+- app folder: `../ceara`
+- URL: `https://www.stuparul.com/ceara/`
+- DB: `stuparul_ceara`
+- build-time DB config source: `D:\Novalupusstudio\ceara\deploy\local\config.php`
+- runtime DB config on server: `../ceara/config/local.php`
+
+## What Is Implemented
 
 ### Processing flow
 
-- creation of processing lots
-- PF/PJ customer handling on the same page
+- create processing lots
+- PF/PJ customer handling on one page
 - dynamic customer lookup
-- PJ support with company fields
-- lot-level snapshot of processing price and shrinkage
-- lot movement journal
-- exchange from operational buffer to customer
+- ANAF lookup for PJ prefill
+- SIRUTA counties/localities
+- lot-level price/shrinkage snapshot
+- movement-based lot math
+- exchange foundations to customer
 - return wax to customer
-- batch delivery to factory/processor
-- support for factory rejection quantities
-- factory buffer plus/minus adjustments
-- processing register
-- lot detail summary cards
-- red warning styling for lots with rejected wax from factory
+- batch delivery to processor/factory
+- rejected wax handling
+- factory buffer plus/minus
+- processing register with document links
 
 ### Purchase flow
 
-- purchase entry flow
-- purchase exit flow
-- separate `wax_purchased` stock register
+- purchase entry
+- purchase exit
+- separate purchase register
+- stock kept separate from custody flow
 
-### Settings/admin
+### Documents / integrations
 
-- own password change
-- role permissions matrix
-- user creation
-- editable users except username
-- store/gestiune administration
-- processor administration
-
-### Documents/integrations
-
-- document series
-- HTML document templates
-- Dompdf-based PDF generation
+- internal document series
+- editable HTML templates
+- Dompdf PDF generation
+- AVIZ generation
+- NIR generation
 - FGO integration path
-- FiscalWire output path
-- processing register document links tied to actual document rows
-- factory delivery now collects `aviz_number` and `aviz_date`
-- factory delivery now auto-generates both `AVIZ` and `NIR`
+- FiscalWire `.inp` output path
 
-## Completed Decisions To Preserve
+### Settings / admin
 
-1. Plain PHP + MySQL remains the chosen stack.
-2. Quantities are stored in grams and shown as kg with three decimals.
-3. Processing stock and purchased stock stay fully separate.
-4. One user works on one gestiune; a gestiune may have many users.
-5. The store context drives operational defaults.
-6. Lot values snapshot at creation and later calculations must use lot values, not mutable global defaults.
-7. `Acceptat` is terminal on the lot board; factory delivery is a separate batch page.
-8. Factory delivery is processor-scoped and must not silently fall back to the first processor in DB.
-9. Critical config should fail loudly instead of silently inventing values.
-10. `App.php` should stay thin; calculations belong in services.
+- company data
+- processors
+- stores / gestiuni
+- document series
+- document templates
+- role permissions
+- user creation/edit
+- DB backup / DB import tab
 
-## Most Recent Fixes Included In This State
+## Decisions To Preserve
 
-### 2026-06-24 status/closure fix
+1. Plain PHP + MySQL stays the stack.
+2. Quantities are stored in grams and shown in kg with three decimals.
+3. `wax_custody`, `foundation_operational`, and `wax_purchased` never mix.
+4. One user works operationally on one gestiune.
+5. Store values are client-facing defaults; processor values are relation-to-factory values.
+6. Lot values are snapshotted and later calculations must use lot values, not mutable defaults.
+7. Critical config must fail loudly.
+8. Business logic should stay in services, not drift back into `App.php`.
+9. Admin without assigned store must still be able to log in after clean init and reach settings.
+10. CODE is always `D:\Novalupusstudio\ceara`; XAMPP folders are deploy targets only.
 
-Lot closure logic was corrected so factory-rejected wax no longer keeps a lot open after that same quantity was already returned to the customer.
+## Most Recent Important Fixes
 
-Current rule:
+### 2026-06-24 production login loop fix
 
-- open rejected wax = rejected - returned - wax loss
+After clean DB init, `admin` has no assigned store. Dashboard used to loop because it still touched processing summaries that required a store.
 
-This affects both:
+Current behavior:
 
-- `lib/ProcessingService.php`
-- `lib/ProcessingWriteService.php`
+- admin can log in after `init-production.sql`
+- dashboard opens with zero balances
+- dashboard shows warning that no store is assigned yet
 
-### Recent factory delivery/register work
+Relevant files:
 
-- `factory_batches` now stores `aviz_number` and `aviz_date`
-- factory delivery form requires those values
-- creating a factory batch generates `AVIZ` and `NIR`
-- processing register rows now try to link to the real related documents instead of plain placeholder text
+- `lib/App.php`
+- `views/pages/dashboard.php`
 
-### Recent customer/PJ work
+### 2026-06-24 subfolder redirect fix
 
-- PJ customer save path now uses `customer_cui` correctly even when PF hidden fields are empty
-- ANAF/SIRUTA matching was improved for county/locality normalization
-- form autofill pressure was reduced with `autocomplete="off"` in processing form fields
+Redirect building was made subfolder-safe for `/ceara/` style hosting paths.
+
+Relevant file:
+
+- `lib/helpers.php`
+
+### 2026-06-24 customer nullable datetime fix
+
+`customers.external_checked_at` must receive `NULL`, not empty string.
+
+Relevant file:
+
+- `lib/CustomerService.php`
+
+Patch zip produced for this:
+
+- `deploy/output/ceara-production-patch-1.2.011-20260624.zip`
+
+## Production Packages
+
+Current known-good full production package:
+
+- `deploy/output/ceara-production-20260624-143740.zip`
+
+Current known-good clean init SQL:
+
+- `deploy/sql/init-production.sql`
+
+Seeded reset login:
+
+- user: `admin`
+- password: `CearaAdmin!2026`
 
 ## Files A New Codex Should Read First
 
 1. `AI_HANDOVER.md`
 2. `PROJECT_CONTEXT.md`
 3. `README.md`
-4. `docs/spec.md`
-5. `docs/source-specs/03-settings.md`
-6. `docs/source-specs/04-flow-processing.md`
-7. `decisions/architecture-decisions.md`
-8. `deploy/DEPLOY_PRODUCTION.md` when packaging or production deploy matters
+4. `SYNC.md`
+5. `docs/spec.md`
+6. `docs/source-specs/03-settings.md`
+7. `docs/source-specs/04-flow-processing.md`
+8. `deploy/DEPLOY_PRODUCTION.md`
 
-## Open Questions / Pending Business Clarifications
+## Recommended Working Flow
 
-1. The later processing statuses after factory delivery are still only partially finalized in business terms.
-2. Mock invoice / receipt generation is still transitional until final third-party API details are locked.
-3. The database still technically allows multiple rows in `user_stores`; business rule says one active gestiune per user, so hard DB enforcement may still be worth doing later.
-4. Some legacy persisted lot status values remain in schema even though operational behavior is increasingly movement-based.
-5. Document templates and exact legal/commercial wording for all generated documents are still evolving.
+1. code only in `D:\Novalupusstudio\ceara`
+2. sync to `DEV`
+3. validate broadly in `DEV`
+4. sync candidate to `STAGE`
+5. import production DB backup into `STAGE` when release validation requires live-like data
+6. re-enter `FGO URL` and `FGO token` after import
+7. validate candidate in `STAGE`
+8. only then build / deploy to `PROD`
 
-## Recommended Next Tasks
+## Open/Pending Areas
 
-1. Sanity-check the updated factory delivery flow end-to-end with aviz number/date, AVIZ, and NIR links.
-2. Audit the remaining document buttons so failed generation never flips UI into a false "print" state.
-3. Review settings/user-store enforcement so one-user-one-gestiune is explicit in backend validation too.
-4. Continue cleaning legacy status assumptions where movement-based balances are now the real source of truth.
-5. When new architectural/business rules are finalized, update:
-   - `PROJECT_CONTEXT.md`
-   - `AI_HANDOVER.md`
-   - `decisions/architecture-decisions.md`
-
-## Deployment / Transfer Notes
-
-For this machine:
-
-- source: `E:\NovaLupus\ceara`
-- XAMPP deploy: `E:\XAMP\htdocs\ceara`
-
-To move work to another PC:
-
-1. pull latest Git state
-2. deploy/sync repo into that machine's XAMPP target
-3. create matching `config/local.php`
-4. import/reset DB from `deploy/sql/init-production.sql` or a DB dump from the working machine
-
-Current production-style seed login from SQL reset:
-
-- user: `admin`
-- password: `CearaAdmin!2026`
+1. More polish on settings UX is still possible.
+2. Some production-safe backup/import workflow docs may still be worth expanding.
+3. Purchase flow may still need additional business-rule passes once real use increases.
+4. Generated legal/commercial document wording can still evolve over time.

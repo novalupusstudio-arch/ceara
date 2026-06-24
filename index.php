@@ -161,7 +161,11 @@ if ($page === 'login') {
     exit;
 }
 
-require_login();
+if (!current_user()) {
+    $page = 'login';
+    require __DIR__ . '/views/login.php';
+    exit;
+}
 
 $activeFlow = $_SESSION['active_flow'] ?? '';
 $basePages = ['dashboard', 'documents', 'reports', 'settings', 'audit'];
@@ -182,23 +186,23 @@ if ($page === 'lot_detail' && (int) ($_GET['lot_id'] ?? 0) <= 0) {
 
 try {
     $data = match ($page) {
-        'dashboard' => array_merge($app->dashboard(), ['active_flow' => $activeFlow]),
+        'dashboard' => array_merge($app->dashboard(current_user()['id']), ['active_flow' => $activeFlow]),
         'processing' => [
             'processors' => $app->processors(),
             'assigned_store' => $app->userPrimaryStore(current_user()['id']),
             'default_processor' => $app->defaultProcessorForUser(current_user()['id']),
         ],
-        'lots' => $app->processingLotsBoard((array) ($_GET['status'] ?? [])),
-        'lot_detail' => $app->processingLotDetail((int) ($_GET['lot_id'] ?? 0)),
-        'factory_delivery' => $app->factoryDeliveryData((int) ($_GET['processor_id'] ?? 0)),
-        'factory_buffer' => $app->factoryBufferData(),
+        'lots' => $app->processingLotsBoard(current_user()['id'], (array) ($_GET['status'] ?? [])),
+        'lot_detail' => $app->processingLotDetail((int) ($_GET['lot_id'] ?? 0), current_user()['id']),
+        'factory_delivery' => $app->factoryDeliveryData(current_user()['id'], (int) ($_GET['processor_id'] ?? 0)),
+        'factory_buffer' => $app->factoryBufferData(current_user()['id']),
         'processing_register' => $app->processingRegisterData(
             current_user()['id'],
             (string) ($_GET['date_start'] ?? ''),
             (string) ($_GET['date_end'] ?? '')
         ),
         'purchases' => [
-            'lots' => $app->purchaseLots(),
+            'lots' => $app->purchaseLots(current_user()['id']),
             'assigned_store' => $app->userPrimaryStore(current_user()['id']),
             'company_settings' => $app->companySettings(),
         ],
@@ -209,7 +213,7 @@ try {
         ),
         'purchase_exit' => $app->purchaseExitData(current_user()['id']),
         'documents' => ['documents' => $app->documents()],
-        'reports' => ['dashboard' => $app->dashboard(), 'processing' => $app->processingLots(), 'purchases' => $app->purchaseLots()],
+        'reports' => ['dashboard' => $app->dashboard(current_user()['id']), 'processing' => $app->processingLots(current_user()['id']), 'purchases' => $app->purchaseLots(current_user()['id'])],
         'settings' => $app->settings(),
         'audit' => ['entries' => $app->audit()],
     };

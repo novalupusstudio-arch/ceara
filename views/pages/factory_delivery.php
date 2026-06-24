@@ -3,6 +3,7 @@ $selectedProcessor = $data['selected_processor'] ?? null;
 $selectedProcessorId = $selectedProcessor ? (int) $selectedProcessor['id'] : 0;
 $priceCents = $selectedProcessor ? (int) $selectedProcessor['processing_price_cents'] : 0;
 $shrinkagePct = $selectedProcessor ? (float) $selectedProcessor['exchange_shrinkage_pct'] : 0.0;
+$store = $data['store'] ?? [];
 ?>
 
 <header class="page-header">
@@ -18,12 +19,17 @@ $shrinkagePct = $selectedProcessor ? (float) $selectedProcessor['exchange_shrink
         <label class="factory-processor">
             Procesator
             <select name="processor_id" onchange="this.form.submit()">
-                <?php foreach ($data['processors'] as $processor): ?>
+                <option value="">Alege procesator</option>
+                <?php foreach (($data['processors'] ?? []) as $processor): ?>
                     <option value="<?= h((string) $processor['id']) ?>" <?= (int) $processor['id'] === $selectedProcessorId ? 'selected' : '' ?>>
                         <?= h($processor['name']) ?>
                     </option>
                 <?php endforeach; ?>
             </select>
+        </label>
+        <label class="factory-processor">
+            Gestiune
+            <input value="<?= h((string) ($store['name'] ?? '')) ?>" readonly>
         </label>
     </form>
 </section>
@@ -124,7 +130,7 @@ $shrinkagePct = $selectedProcessor ? (float) $selectedProcessor['exchange_shrink
                     <?php endforeach; ?>
                     <?php if (!$data['lots']): ?>
                         <tr>
-                            <td colspan="8" class="empty">Nu exista loturi cu ceara disponibila pentru procesatorul selectat.</td>
+                            <td colspan="8" class="empty"><?= $selectedProcessorId > 0 ? 'Nu exista loturi cu ceara disponibila pentru procesatorul selectat.' : 'Selecteaza un procesator pentru a vedea loturile disponibile.' ?></td>
                         </tr>
                     <?php endif; ?>
                 </tbody>

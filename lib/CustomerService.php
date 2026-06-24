@@ -179,12 +179,12 @@ final class CustomerService
 
         $processorId = (int) ($store['processor_id'] ?? 0);
         if ($processorId <= 0) {
-            throw new RuntimeException('Gestiunea utilizatorului nu are procesator asignat.');
+            return null;
         }
 
         $processor = ($this->find)('processors', $processorId);
         if (!$processor) {
-            throw new RuntimeException('Procesatorul asignat gestiunii nu exista.');
+            return null;
         }
 
         return $processor;
@@ -342,8 +342,14 @@ final class CustomerService
             'legal_form' => trim((string) ($data['customer_legal_form'] ?? '')),
             'vat_status' => trim((string) ($data['customer_vat_status'] ?? '')),
             'external_source' => trim((string) ($data['customer_external_source'] ?? '')),
-            'external_checked_at' => trim((string) ($data['customer_external_checked_at'] ?? '')),
+            'external_checked_at' => $this->normalizeNullableDateTime($data['customer_external_checked_at'] ?? null),
         ];
+    }
+
+    private function normalizeNullableDateTime(mixed $value): ?string
+    {
+        $value = trim((string) $value);
+        return $value === '' ? null : $value;
     }
 
     private function processingCompanyIdentifier(array $data): string

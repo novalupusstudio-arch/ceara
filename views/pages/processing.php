@@ -4,10 +4,8 @@ if (!$assignedStore) {
     throw new RuntimeException('Utilizatorul nu are o gestiune alocata.');
 }
 
-$defaultProcessorId = (int) ($assignedStore['processor_id'] ?? 0);
-if ($defaultProcessorId <= 0) {
-    throw new RuntimeException('Gestiunea utilizatorului nu are procesator asignat.');
-}
+$defaultProcessor = $data['default_processor'] ?? null;
+$defaultProcessorId = (int) ($defaultProcessor['id'] ?? ($assignedStore['processor_id'] ?? 0));
 
 $defaultPriceCents = (int) ($assignedStore['processing_price_cents'] ?? 0);
 $defaultShrinkagePct = (float) ($assignedStore['processing_shrinkage_pct'] ?? 0);
@@ -121,6 +119,7 @@ $defaultShrinkagePct = (float) ($assignedStore['processing_shrinkage_pct'] ?? 0)
                 <label>
                     Procesator
                     <select name="processor_id" data-processor-select>
+                        <option value="">Alege procesator</option>
                         <?php foreach ($data['processors'] as $processor): ?>
                             <option value="<?= h((string) $processor['id']) ?>" <?= (int) $processor['id'] === $defaultProcessorId ? 'selected' : '' ?>>
                                 <?= h($processor['name']) ?>

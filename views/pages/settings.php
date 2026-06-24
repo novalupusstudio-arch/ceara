@@ -9,6 +9,7 @@ $canManageDocumentTemplates = (bool) ($rolePermissions[$currentRole]['DOCUMENT_T
 $availableTabs = [];
 if ($canManageSecurity) {
     $availableTabs['company'] = 'Date societate';
+    $availableTabs['environment'] = 'Backup si sync';
 }
 if ($canManageProcessors) {
     $availableTabs['processors'] = 'Procesatori';
@@ -110,6 +111,72 @@ foreach ($data['stores'] as $store) {
             </label>
             <button class="primary" type="submit">Salveaza datele societatii</button>
         </form>
+    </section>
+<?php endif; ?>
+
+<?php if ($activeTab === 'environment' && $canManageSecurity): ?>
+    <?php $maintenance = $data['database_maintenance'] ?? []; ?>
+    <section class="panel">
+        <h2>Backup si sincronizare baza de date</h2>
+        <div class="form-grid">
+            <label>
+                Baza curenta
+                <input value="<?= h((string) ($maintenance['database_name'] ?? '')) ?>" readonly>
+            </label>
+            <label class="wide">
+                Director backup
+                <input value="<?= h((string) ($maintenance['backup_dir'] ?? '')) ?>" readonly>
+            </label>
+        </div>
+        <p class="muted">Importul reseteaza complet baza curenta, importa fisierul SQL selectat si apoi iti cere sa reintroduci manual FGO URL si FGO token din tabul Date societate.</p>
+        <?php if (empty($maintenance['available'])): ?>
+            <p class="error-text">Executabilele mysql / mysqldump nu au fost detectate pe acest mediu.</p>
+        <?php endif; ?>
+        <div class="panel-actions">
+            <form method="post">
+                <input type="hidden" name="action" value="create_database_backup">
+                <button class="primary" type="submit">Genereaza backup SQL</button>
+            </form>
+        </div>
+    </section>
+
+    <section class="panel">
+        <h2>Importa backup SQL</h2>
+        <form method="post" enctype="multipart/form-data" class="form-grid">
+            <input type="hidden" name="action" value="import_database_backup">
+            <label class="wide">
+                Fisier SQL
+                <input type="file" name="database_backup_file" accept=".sql" required>
+            </label>
+            <button class="primary" type="submit">Importa baza din fisier</button>
+        </form>
+    </section>
+
+    <section class="panel">
+        <h2>Ultimele backup-uri</h2>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Fisier</th>
+                        <th>Marime</th>
+                        <th>Modificat</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach (($maintenance['files'] ?? []) as $file): ?>
+                        <tr>
+                            <td><strong><?= h($file['name']) ?></strong></td>
+                            <td><?= h(number_format(((int) $file['size']) / 1024, 1, '.', '')) ?> KB</td>
+                            <td><?= h(date('d.m.Y H:i', strtotime((string) $file['modified_at']))) ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    <?php if (empty($maintenance['files'])): ?>
+                        <tr><td colspan="3" class="empty">Nu exista backup-uri SQL generate local.</td></tr>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
     </section>
 <?php endif; ?>
 

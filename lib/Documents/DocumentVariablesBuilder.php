@@ -94,10 +94,18 @@ final class DocumentVariablesBuilder
                 $variables['lot_number'] = (string) $lot['lot_number'];
                 $variables['gross_wax_kg'] = grams_to_kg((int) $lot['gross_g']);
                 $variables['shrinkage_pct'] = rtrim(rtrim(number_format((float) $lot['shrinkage_pct'], 3, '.', ''), '0'), '.');
+                if (!empty($lot['processor_id'])) {
+                    $processor = $this->find('processors', (int) $lot['processor_id']);
+                    if ($processor) {
+                        $variables['processor_name'] = (string) ($processor['name'] ?? '');
+                        $variables['processor_identifier'] = (string) ($processor['cui'] ?? '');
+                        $variables['processor_address'] = (string) ($processor['address'] ?? '');
+                    }
+                }
             }
         }
 
-        if (!empty($store['processor_id'])) {
+        if ($variables['processor_name'] === '' && !empty($store['processor_id'])) {
             $processor = $this->find('processors', (int) $store['processor_id']);
             if ($processor) {
                 $variables['processor_name'] = (string) ($processor['name'] ?? '');

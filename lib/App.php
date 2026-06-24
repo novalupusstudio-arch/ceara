@@ -46,13 +46,15 @@ final class App
         return $this->customerService()->searchCustomers($customerType, $term);
     }
 
-    public function dashboard(): array
+    public function dashboard(int $userId): array
     {
-        $summaries = $this->processingService()->processingLotSummaries();
+        $store = $this->userPrimaryStore($userId);
+        $storeId = $store ? (int) $store['id'] : 0;
+        $summaries = $storeId > 0 ? $this->processingService()->processingLotSummaries($userId) : [];
         $openLots = 0;
         $recoveryLots = 0;
         $waxCustody = 0;
-        $foundationOperational = $this->sumInventory('foundation_operational');
+        $foundationOperational = $storeId > 0 ? $this->sumInventoryForStore('foundation_operational', $storeId) : 0;
         foreach ($summaries as $summary) {
             if ($summary['calculated_status'] !== 'Inchis') {
                 $openLots++;
@@ -68,28 +70,22 @@ final class App
             'wax_custody_g' => $waxCustody,
             'pending_lots' => $openLots,
             'rejected_lots' => $recoveryLots,
-            'wax_owned_g' => $this->sumInventory('wax_owned') + $this->sumInventory('wax_purchased'),
-            'foundation_merchandise_g' => $this->sumInventory('foundation_merchandise'),
+            'wax_owned_g' => $storeId > 0
+                ? $this->sumInventoryForStore('wax_owned', $storeId) + $this->sumInventoryForStore('wax_purchased', $storeId)
+                : 0,
+            'foundation_merchandise_g' => $storeId > 0 ? $this->sumInventoryForStore('foundation_merchandise', $storeId) : 0,
+            'has_assigned_store' => $storeId > 0,
         ];
     }
 
-    public function processingLots(): array
+    public function processingLots(int $userId): array
     {
-        return $this->processingService()->processingLots();
+        return $this->processingService()->processingLots($userId);
     }
 
-    public function factoryDeliveryData(int $processorId): array
+    public function factoryDeliveryData(int $userId, int $processorId = 0): array
     {
-        if ($processorId <= 0) {
-            $store = $this->userPrimaryStore((int) current_user()['id']);
-            $processorId = (int) ($store['processor_id'] ?? 0);
-        }
-
-        if ($processorId <= 0) {
-            throw new RuntimeException('Gestiunea utilizatorului nu are procesator asignat pentru predarea la fabrica.');
-        }
-
-        return $this->processingService()->factoryDeliveryData($processorId, fn () => $this->processingService()->processingLotSummaries());
+        return $this->processingService()->factoryDeliveryData($userId, $processorId);
     }
 
     public function processingLotStatuses(): array
@@ -97,14 +93,14 @@ final class App
         return $this->processingService()->processingLotStatuses();
     }
 
-    public function processingLotsBoard(array $filters = []): array
+    public function processingLotsBoard(int $userId, array $filters = []): array
     {
-        return $this->processingService()->processingLotsBoard($this->processingService()->processingLotSummaries(), $filters);
+        return $this->processingService()->processingLotsBoard($this->processingService()->processingLotSummaries($userId), $filters);
     }
 
-    public function factoryBufferData(): array
+    public function factoryBufferData(int $userId): array
     {
-        return $this->processingService()->factoryBufferData();
+        return $this->processingService()->factoryBufferData($userId);
     }
 
     public function documentById(int $documentId): ?array
@@ -127,14 +123,14 @@ final class App
         return $this->processingService()->processingRegisterData($userId, $dateStart, $dateEnd);
     }
 
-    public function processingLotDetail(int $lotId): array
+    public function processingLotDetail(int $lotId, int $userId): array
     {
-        return $this->processingService()->processingLotDetail($lotId, fn (int $id) => $this->processingService()->processingLotSummary($id));
+        return $this->processingService()->processingLotDetail($lotId, $userId, fn (int $id, int $storeId) => $this->processingService()->processingLotSummary($id, $storeId));
     }
 
-    public function purchaseLots(): array
+    public function purchaseLots(int $userId): array
     {
-        return $this->purchaseService()->purchaseLots();
+        return $this->purchaseService()->purchaseLots($userId);
     }
 
     public function purchaseRegisterData(int $userId, string $dateStart = '', string $dateEnd = ''): array
@@ -209,7 +205,10 @@ final class App
 
     public function settings(): array
     {
-        return $this->settingsService()->settings();
+        return array_merge(
+            $this->settingsService()->settings(),
+            ['database_maintenance' => $this->databaseMaintenanceService()->data()]
+        );
     }
 
     public function changeOwnPassword(int $userId, string $newPassword, string $confirmPassword): void
@@ -266,6 +265,16 @@ final class App
         $this->settingsService()->saveCompanySettings($data, $userId);
     }
 
+    public function createDatabaseBackup(int $userId): array
+    {
+        return $this->databaseMaintenanceService()->createBackup($userId);
+    }
+
+    public function importDatabaseBackup(array $file, int $userId): array
+    {
+        return $this->databaseMaintenanceService()->importUploadedBackup($file, $userId);
+    }
+
     public function roleHasPermission(string $role, string $permission): bool
     {
         $stmt = $this->pdo->prepare(
@@ -298,6 +307,16 @@ final class App
     public function userStores(): array
     {
         return $this->settingsService()->userStores();
+    }
+
+    private function requireUserPrimaryStore(int $userId): array
+    {
+        $store = $this->userPrimaryStore($userId);
+        if (!$store) {
+            throw new RuntimeException('Utilizatorul nu are o gestiune alocata.');
+        }
+
+        return $store;
     }
 
     private function customerService(): \Ceara\CustomerService
@@ -452,6 +471,16 @@ final class App
         return new \Ceara\SettingsService(
             $this->pdo,
             fn (string $table, int $id) => $this->find($table, $id),
+            fn (int $userId, string $operation, string $entity, ?int $entityId, ?string $old, ?string $new) => $this->logAudit($userId, $operation, $entity, $entityId, $old, $new)
+        );
+    }
+
+    private function databaseMaintenanceService(): \Ceara\DatabaseMaintenanceService
+    {
+        return new \Ceara\DatabaseMaintenanceService(
+            $this->pdo,
+            $this->config,
+            dirname(__DIR__) . '/storage',
             fn (int $userId, string $operation, string $entity, ?int $entityId, ?string $old, ?string $new) => $this->logAudit($userId, $operation, $entity, $entityId, $old, $new)
         );
     }

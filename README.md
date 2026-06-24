@@ -7,102 +7,151 @@ Local-first PHP + MySQL operational app for:
 
 ## Current Repo State
 
-- source path on this machine: `E:\NovaLupus\ceara`
-- local XAMPP target on this machine: `E:\XAMP\htdocs\ceara`
-- local URL: `http://localhost/ceara/`
+- source path on this machine: `D:\Novalupusstudio\ceara`
+- local DEV XAMPP target: `D:\xampp\htdocs\ceara`
+- local DEV URL: `http://localhost/ceara/`
+- local STAGE XAMPP target: `D:\xampp\htdocs\ceara_stage`
+- local STAGE URL: `http://localhost/ceara_stage/`
 - git remote: `https://github.com/novalupusstudio-arch/ceara.git`
 - branch: `main`
-- current version: `1.2.000`
+- current version: `1.2.012`
 
-## Stack
+## Environments
 
-- plain PHP
-- MySQL
-- XAMPP
-- server-rendered views
-- small JS/CSS layer in `assets/`
-- Dompdf committed in `vendor/`
+Current working model:
 
-## Main Business Areas
+- `CODE`: `D:\Novalupusstudio\ceara`
+- `DEV`: `D:\xampp\htdocs\ceara` + DB `ceara`
+- `STAGE`: `D:\xampp\htdocs\ceara_stage` + DB `ceara_stage`
+- `PROD`: `../ceara` + DB `stuparul_ceara`
 
-### Processing flow
+Recommended release flow:
 
-- create processing lots
-- PF/PJ customer handling
-- dynamic customer lookup
-- exchange foundations from local buffer
-- return wax to customer
-- batch factory delivery per processor
-- factory rejection support
-- factory buffer plus/minus
-- movement-based lot summaries
-- processing register with document links
+1. develop in `CODE`
+2. sync to `DEV` for free testing
+3. sync candidate to `STAGE`
+4. import live production DB backup into `STAGE` when needed
+5. re-enter `FGO URL` and `FGO token` in `Date societate` after DB import
+6. validate candidate on `STAGE`
+7. deploy the same candidate to `PROD`
 
-### Purchase flow
+## Database Config Files By Environment
 
-- purchase lot creation
-- purchase stock exits
-- separate purchase register
+- source repo local dev config:
+  - `config/local.php`
+- source repo production build config:
+  - `deploy/local/config.php`
+- DEV runtime config:
+  - `D:\xampp\htdocs\ceara\config\local.php`
+- STAGE runtime config:
+  - `D:\xampp\htdocs\ceara_stage\config\local.php`
+- PROD runtime config:
+  - `../ceara/config/local.php`
 
-### Settings/admin
+## XAMPP Sync
 
-- own password change
-- role permissions
-- user creation/edit
-- store management
-- processor management
-- document series
-- document templates
+Machine-specific sync targets live outside Git:
 
-## Critical Rules
+- `config/xampp-target.local.txt`
+- `config/xampp-stage-target.local.txt`
 
-- `wax_custody`, `foundation_operational`, and `wax_purchased` are separate stock buckets
-- quantities are stored in grams and shown in kg with three decimals
-- one user works on one gestiune; one gestiune may have many users
-- lot processing price and shrinkage are snapshotted on the lot
-- factory delivery is separate from the lot board
-- critical config should fail loudly, not silently fall back
-- business logic should stay in services, not drift back into `App.php` or views
-
-## Local Setup On A New PC
-
-1. Clone the repo.
-2. Start Apache and MySQL in XAMPP.
-3. Create ignored `config/local.php` with DB credentials.
-4. Create ignored `config/xampp-target.local.txt` with the local XAMPP target.
-5. Initialize or restore the database.
-6. Sync the repo into XAMPP.
-7. Open the local URL.
-
-Sync command:
+Sync DEV:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\sync-to-xampp.ps1
 ```
 
-Production-style reset SQL:
+Sync STAGE:
 
 ```powershell
-E:\XAMP\mysql\bin\mysql.exe -u root ceara < E:\NovaLupus\ceara\deploy\sql\init-production.sql
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\sync-to-xampp.ps1 -Profile stage
 ```
+
+## Production Deploy
+
+Build production zip only when explicitly requested:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-production-zip.ps1
+```
+
+Current production-ready full package:
+
+- `deploy/output/ceara-production-20260624-143740.zip`
+
+Current production patch package for the `external_checked_at` fix:
+
+- `deploy/output/ceara-production-patch-1.2.011-20260624.zip`
+
+Production reset SQL:
+
+- `deploy/sql/init-production.sql`
 
 Seeded reset login:
 
 - user: `admin`
 - password: `CearaAdmin!2026`
 
+## Current Implemented Areas
+
+### Processing flow
+
+- processing lot creation
+- PF/PJ customer handling
+- ANAF + SIRUTA assisted PJ/locality flow
+- dynamic customer lookup
+- lot-level snapshot of price and shrinkage
+- lot movement journal
+- exchange from operational buffer
+- wax return to customer
+- processor batch delivery with aviz date/number
+- factory rejection support
+- factory buffer plus/minus
+- processing register with document links
+
+### Purchase flow
+
+- purchase entry flow
+- purchase exit flow
+- separate `wax_purchased` register
+
+### Documents / integrations
+
+- internal document series
+- editable HTML templates
+- Dompdf PDF generation
+- FGO invoice integration path
+- FiscalWire `.inp` export path
+- AVIZ and NIR generation from factory delivery
+
+### Settings / admin
+
+- company data
+- processors
+- stores / gestiuni
+- document series
+- document templates
+- roles / permissions
+- user management
+- backup and DB import tools
+
+## Important Business Rules
+
+- `wax_custody`, `foundation_operational`, and `wax_purchased` are separate stock buckets
+- quantities are stored in grams and shown in kg with three decimals
+- one user works on one gestiune
+- a gestiune may have many users
+- lot processing price and shrinkage are snapshotted on the lot
+- processor values and store values are different business relations and must stay separate
+- admin without assigned store must still be able to log in after clean init and reach settings
+- critical config should fail loudly, not silently fall back
+
 ## Important Local Files
 
 - `AI_HANDOVER.md`
 - `PROJECT_CONTEXT.md`
+- `SYNC.md`
 - `docs/spec.md`
-- `decisions/architecture-decisions.md`
 - `docs/source-specs/03-settings.md`
 - `docs/source-specs/04-flow-processing.md`
-
-## Deploy / Packaging
-
-- local sync script: `scripts/sync-to-xampp.ps1`
-- production reset SQL: `deploy/sql/init-production.sql`
-- production guidance: `deploy/DEPLOY_PRODUCTION.md`
-- production package output: `deploy/output/`
+- `deploy/DEPLOY_PRODUCTION.md`

@@ -1,8 +1,21 @@
+param(
+    [ValidateSet("dev", "stage")]
+    [string] $Profile = "dev"
+)
+
 $ErrorActionPreference = "Stop"
 
 $source = Resolve-Path (Join-Path $PSScriptRoot "..")
-$targetConfig = Join-Path $source "config\xampp-target.local.txt"
-$target = "E:\XAMP\htdocs\ceara"
+$targetConfigMap = @{
+    dev = "config\xampp-target.local.txt"
+    stage = "config\xampp-stage-target.local.txt"
+}
+$defaultTargetMap = @{
+    dev = "D:\xampp\htdocs\ceara"
+    stage = "D:\xampp\htdocs\ceara_stage"
+}
+$targetConfig = Join-Path $source $targetConfigMap[$Profile]
+$target = $defaultTargetMap[$Profile]
 
 if (Test-Path -LiteralPath $targetConfig) {
     $configuredTarget = (Get-Content -LiteralPath $targetConfig -Raw).Trim()
@@ -31,6 +44,7 @@ $excludedFiles = @(
     ".gitignore",
     ".env",
     "xampp-target.local.txt",
+    "xampp-stage-target.local.txt",
     ".DS_Store",
     "Thumbs.db",
     "Desktop.ini"
@@ -57,4 +71,4 @@ Get-ChildItem -Path $source -Force -Recurse -File | ForEach-Object {
     Copy-Item -LiteralPath $file.FullName -Destination $destination -Force
 }
 
-Write-Host "Synced $source to $target"
+Write-Host "Synced profile '$Profile' from $source to $target"

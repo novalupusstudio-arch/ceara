@@ -25,10 +25,15 @@ final class ProcessingWriteService
 
     public function createProcessingLot(array $data, int $userId): int
     {
+        $assignedStore = $this->requireUserPrimaryStore($userId);
         $this->pdo->beginTransaction();
         try {
             $customer = $this->customers->resolveProcessingCustomer($data);
-            $lotNumber = $this->nextLotNumber('PROC');
+            $storeId = (int) $data['store_id'];
+            if ($storeId !== (int) $assignedStore['id']) {
+                throw new RuntimeException('Lotul trebuie creat in gestiunea asignata utilizatorului.');
+            }
+            $lotNumber = $this->nextProcessingLotNumber($storeId);
             $gross = kg_to_grams($data['gross_kg']);
             $this->processingProcessorData((int) $data['processor_id']);
             $shrinkage = (float) str_replace(',', '.', (string) ($data['shrinkage_pct'] ?? '0'));
@@ -55,16 +60,16 @@ final class ProcessingWriteService
                 $processingPriceCents,
                 $shrinkage,
                 $foundation,
-                $data['store_id'],
+                $storeId,
                 $data['processor_id'] ?: null,
                 $userId,
             ]);
             $lotId = (int) $this->pdo->lastInsertId();
 
-            $this->inventory->record('wax_custody', $gross, (int) $data['store_id'], 'processing_lot', $lotId, 'Ceara client in custodie');
+            $this->inventory->record('wax_custody', $gross, $storeId, 'processing_lot', $lotId, 'Ceara client in custodie');
             $movementId = $this->processingMovement($lotId, 'RECEIVE_WAX_FROM_CLIENT', $gross, 0, 0, trim((string) ($data['notes'] ?? '')), $userId);
             $this->recordProcessingLotStatus($lotId, $status, $userId);
-            $this->documents->issue('PV-CUST', 'processing_lot_movement', $movementId, (int) $data['store_id'], 'issued', 'PV primire ceara in custodie', [
+            $this->documents->issue('PV-CUST', 'processing_lot_movement', $movementId, $storeId, 'issued', 'PV primire ceara in custodie', [
                 'lot_id' => $lotId,
                 'movement_id' => $movementId,
                 'created_by' => $userId,
@@ -85,6 +90,7 @@ final class ProcessingWriteService
         if (!$summary) {
             throw new RuntimeException('Lotul nu exista.');
         }
+        $this->assertStoreAccess((int) $summary['lot']['store_id'], $userId);
 
         $wax = kg_to_grams($waxKg);
         if ($wax <= 0) {
@@ -121,6 +127,7 @@ final class ProcessingWriteService
         if (!$summary) {
             throw new RuntimeException('Lotul nu exista.');
         }
+        $this->assertStoreAccess((int) $summary['lot']['store_id'], $userId);
 
         $wax = kg_to_grams($waxKg);
         if ($wax <= 0) {
@@ -151,16 +158,13 @@ final class ProcessingWriteService
     public function createFactoryBufferAdjustment(array $data, int $userId): int
     {
         $type = $data['adjustment_type'] === 'minus' ? 'minus' : 'plus';
-        $storeId = (int) ($data['store_id'] ?? 0);
+        $store = $this->requireUserPrimaryStore($userId);
+        $storeId = (int) $store['id'];
         $avizNumber = trim((string) ($data['aviz_number'] ?? ''));
         $avizDate = $this->normalizeDate((string) ($data['aviz_date'] ?? '')) ?: date('Y-m-d');
         $receptionDate = $this->normalizeDate((string) ($data['reception_date'] ?? '')) ?: date('Y-m-d');
         $qty = kg_to_grams((string) ($data['qty_kg'] ?? '0'));
         $notes = trim((string) ($data['notes'] ?? ''));
-
-        if (!$this->find('stores', $storeId)) {
-            throw new RuntimeException('Gestiunea selectata nu exista.');
-        }
         if ($avizNumber === '') {
             throw new RuntimeException('Numarul avizului este obligatoriu.');
         }
@@ -216,6 +220,7 @@ final class ProcessingWriteService
         if (!$lot) {
             throw new RuntimeException('Lotul nu exista.');
         }
+        $this->assertStoreAccess((int) $lot['store_id'], $userId);
 
         $map = [
             'accept' => ['from' => 'In Validare', 'to' => 'Acceptat', 'docs' => ['FACT', 'BON']],
@@ -245,6 +250,7 @@ final class ProcessingWriteService
 
     public function createFactoryBatch(array $data, int $userId): int
     {
+        $store = $this->requireUserPrimaryStore($userId);
         $processorId = (int) ($data['processor_id'] ?? 0);
         $avizNumber = trim((string) ($data['aviz_number'] ?? ''));
         $avizDate = $this->normalizeDate((string) ($data['aviz_date'] ?? '')) ?: date('Y-m-d');
@@ -282,6 +288,9 @@ final class ProcessingWriteService
                 if (!$lot) {
                     throw new RuntimeException('Un lot selectat nu mai exista.');
                 }
+                if ((int) $lot['store_id'] !== (int) $store['id']) {
+                    throw new RuntimeException('Toate loturile selectate trebuie sa apartina gestiunii utilizatorului.');
+                }
                 if ((int) $lot['processor_id'] !== $processorId) {
                     throw new RuntimeException('Toate loturile trebuie sa apartina procesatorului selectat.');
                 }
@@ -318,7 +327,7 @@ final class ProcessingWriteService
             $stmt->execute([
                 $batchNumber,
                 $processorId,
-                (int) $selectedLots[0]['lot']['store_id'],
+                (int) $store['id'],
                 $avizNumber,
                 $avizDate,
                 $totalWax,
@@ -351,13 +360,13 @@ final class ProcessingWriteService
             }
 
             if ($totalWax > 0) {
-                $this->inventory->record('wax_custody', -$totalWax, (int) $selectedLots[0]['lot']['store_id'], 'factory_batch', $batchId, 'Ceara trimisa la procesator');
-                $this->inventory->record('foundation_operational', $totalFoundation, (int) $selectedLots[0]['lot']['store_id'], 'factory_batch', $batchId, 'Faguri primiti de la procesator');
-                $this->documents->issue('AVIZ', 'factory_batch', $batchId, (int) $selectedLots[0]['lot']['store_id'], 'issued', 'Aviz catre procesator', [
+                $this->inventory->record('wax_custody', -$totalWax, (int) $store['id'], 'factory_batch', $batchId, 'Ceara trimisa la procesator');
+                $this->inventory->record('foundation_operational', $totalFoundation, (int) $store['id'], 'factory_batch', $batchId, 'Faguri primiti de la procesator');
+                $this->documents->issue('AVIZ', 'factory_batch', $batchId, (int) $store['id'], 'issued', 'Aviz catre procesator', [
                     'factory_batch_id' => $batchId,
                     'created_by' => $userId,
                 ]);
-                $this->documents->issue('NIR', 'factory_batch', $batchId, (int) $selectedLots[0]['lot']['store_id'], 'issued', 'NIR pentru aviz ' . $avizNumber, [
+                $this->documents->issue('NIR', 'factory_batch', $batchId, (int) $store['id'], 'issued', 'NIR pentru aviz ' . $avizNumber, [
                     'factory_batch_id' => $batchId,
                     'created_by' => $userId,
                 ]);
@@ -525,6 +534,40 @@ final class ProcessingWriteService
         return $row ?: null;
     }
 
+    private function userPrimaryStore(int $userId): ?array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT s.*
+             FROM user_stores us
+             JOIN stores s ON s.id = us.store_id
+             WHERE us.user_id = ?
+             ORDER BY us.store_id
+             LIMIT 1'
+        );
+        $stmt->execute([$userId]);
+        $store = $stmt->fetch();
+
+        return $store ?: null;
+    }
+
+    private function requireUserPrimaryStore(int $userId): array
+    {
+        $store = $this->userPrimaryStore($userId);
+        if (!$store) {
+            throw new RuntimeException('Utilizatorul nu are o gestiune alocata.');
+        }
+
+        return $store;
+    }
+
+    private function assertStoreAccess(int $storeId, int $userId): void
+    {
+        $store = $this->requireUserPrimaryStore($userId);
+        if ((int) $store['id'] !== $storeId) {
+            throw new RuntimeException('Operatiunea nu apartine gestiunii utilizatorului.');
+        }
+    }
+
     private function normalizeDate(string $date): string
     {
         $date = trim($date);
@@ -547,6 +590,37 @@ final class ProcessingWriteService
 
         $parts = array_map('intval', explode('-', $date));
         return checkdate($parts[1], $parts[2], $parts[0]) ? $date : '';
+    }
+
+    private function nextProcessingLotNumber(int $storeId): string
+    {
+        $stmt = $this->pdo->prepare('SELECT code FROM stores WHERE id = ? LIMIT 1 FOR UPDATE');
+        $stmt->execute([$storeId]);
+        $store = $stmt->fetch();
+        $storeCode = strtoupper(trim((string) ($store['code'] ?? '')));
+
+        if ($storeCode === '') {
+            throw new RuntimeException('Gestiunea lotului nu are cod valid pentru numerotare.');
+        }
+
+        $pattern = 'LOT-' . $storeCode . '-%';
+        $stmt = $this->pdo->prepare(
+            'SELECT lot_number
+             FROM processing_lots
+             WHERE store_id = ? AND lot_number LIKE ?
+             ORDER BY id DESC
+             LIMIT 1
+             FOR UPDATE'
+        );
+        $stmt->execute([$storeId, $pattern]);
+        $lastLot = $stmt->fetchColumn();
+
+        $nextNumber = 1;
+        if (is_string($lastLot) && preg_match('/^LOT-' . preg_quote($storeCode, '/') . '-(\d{4})$/', $lastLot, $matches)) {
+            $nextNumber = ((int) $matches[1]) + 1;
+        }
+
+        return sprintf('LOT-%s-%04d', $storeCode, $nextNumber);
     }
 
     private function nextLotNumber(string $prefix): string

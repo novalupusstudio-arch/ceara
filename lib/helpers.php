@@ -5,10 +5,51 @@ function h(?string $value): string
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
 }
 
+function app_path(string $path = ''): string
+{
+    $candidates = [
+        (string) ($_SERVER['PHP_SELF'] ?? ''),
+        (string) ($_SERVER['SCRIPT_NAME'] ?? ''),
+        (string) ($_SERVER['REQUEST_URI'] ?? ''),
+    ];
+
+    $base = '';
+    foreach ($candidates as $candidate) {
+        $normalized = str_replace('\\', '/', trim($candidate));
+        if ($normalized === '') {
+            continue;
+        }
+
+        $normalized = preg_replace('/[?#].*$/', '', $normalized) ?? $normalized;
+        if (str_ends_with($normalized, '.php')) {
+            $candidateBase = rtrim(str_replace('\\', '/', dirname($normalized)), '/.');
+        } elseif ($normalized !== '/') {
+            $candidateBase = rtrim($normalized, '/');
+        } else {
+            $candidateBase = '';
+        }
+
+        if (strlen($candidateBase) > strlen($base)) {
+            $base = $candidateBase;
+        }
+    }
+
+    $normalizedPath = ltrim($path, '/');
+    if ($normalizedPath === '') {
+        return ($base !== '' ? $base : '') . '/';
+    }
+
+    if ($base === '' || $base === '/') {
+        return '/' . $normalizedPath;
+    }
+
+    return $base . '/' . $normalizedPath;
+}
+
 function redirect(string $page, array $params = []): never
 {
     $params = array_merge(['page' => $page], $params);
-    header('Location: index.php?' . http_build_query($params));
+    header('Location: ' . app_path('index.php') . '?' . http_build_query($params));
     exit;
 }
 

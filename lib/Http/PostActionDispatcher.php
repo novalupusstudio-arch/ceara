@@ -128,7 +128,6 @@ final class PostActionDispatcher
                 'aviz_date' => \post_string('aviz_date'),
                 'reception_date' => \post_string('reception_date'),
                 'qty_kg' => \post_string('qty_kg'),
-                'store_id' => \post_int('store_id'),
                 'notes' => \post_string('notes'),
             ], $user['id']);
             \flash('Avizul de buffer fabrica a fost inregistrat.');
@@ -313,6 +312,24 @@ final class PostActionDispatcher
             ], $user['id']);
             \flash('Datele societatii au fost salvate.');
             \redirect('settings', ['settings_tab' => 'company']);
+        }
+
+        if ($action === 'create_database_backup') {
+            if (!\is_initial_admin()) {
+                throw new RuntimeException('Doar adminul initial poate genera backup-uri SQL.');
+            }
+            $result = $app->createDatabaseBackup($user['id']);
+            \flash('Backup SQL generat: ' . $result['file_name']);
+            \redirect('settings', ['settings_tab' => 'environment']);
+        }
+
+        if ($action === 'import_database_backup') {
+            if (!\is_initial_admin()) {
+                throw new RuntimeException('Doar adminul initial poate importa backup-uri SQL.');
+            }
+            $result = $app->importDatabaseBackup($_FILES['database_backup_file'] ?? [], $user['id']);
+            \flash('Importul SQL s-a terminat. Backup local automat: ' . $result['backup_file'] . '. Reintrodu manual FGO URL si FGO token din Date societate.', 'warning');
+            \redirect('settings', ['settings_tab' => 'environment']);
         }
 
     }

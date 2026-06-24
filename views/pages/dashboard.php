@@ -14,6 +14,12 @@ $flowTitle = match ($activeFlow) {
     </div>
 </header>
 
+<?php if (isset($data['has_assigned_store']) && !$data['has_assigned_store']): ?>
+    <section class="panel">
+        <p>Utilizatorul curent nu are inca o gestiune alocata. Configureaza o gestiune si asigneaz-o utilizatorului din Setari pentru a activa fluxurile operationale.</p>
+    </section>
+<?php endif; ?>
+
 <section class="kpi-grid">
     <article class="kpi">
         <span>Stoc faguri operational</span>

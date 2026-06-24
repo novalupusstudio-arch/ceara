@@ -30,6 +30,7 @@ Business rule:
 
 - one user works on one gestiune
 - one gestiune may have multiple users
+- clean init may leave `admin` without gestiune, but login must still succeed so setup can continue
 
 ## Navigation
 
@@ -54,6 +55,15 @@ Purchase navigation:
 - Achizitie ceara
 - Iesire ceara
 - Registru achizitie
+
+## Environments
+
+Current environment map:
+
+- CODE: `D:\Novalupusstudio\ceara`
+- DEV: `D:\xampp\htdocs\ceara` with DB `ceara`
+- STAGE: `D:\xampp\htdocs\ceara_stage` with DB `ceara_stage`
+- PROD: `../ceara` with DB `stuparul_ceara`
 
 ## Stock Model
 

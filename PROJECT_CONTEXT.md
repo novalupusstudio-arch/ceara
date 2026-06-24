@@ -1,33 +1,66 @@
 # Project Context
 
-## Project Purpose
+## Purpose
 
-`Ceara` is a local-first PHP + MySQL operational webapp for a wax-processing business that works in two parallel flows:
+`Ceara` is a local-first PHP + MySQL operational webapp for a wax-processing business that runs two separate domains:
 
-1. customer wax received in custody and partially or fully exchanged into foundations
-2. company-owned wax purchased into stock and later exited through separate commercial documents
+1. customer wax received in custody and exchanged into foundations
+2. company-owned wax purchased into stock and later exited separately
 
-The app is designed to run the same way on multiple Windows PCs through XAMPP, with source kept in Git and local deploys copied into XAMPP.
+The same codebase is used for local DEV, local STAGE, and live PROD.
 
-## Current Runtime And Locations
+## Environment Layout
 
-- source repo: `E:\NovaLupus\ceara`
-- local XAMPP target on this machine: `E:\XAMP\htdocs\ceara`
-- local URL: `http://localhost/ceara/`
-- current app version: `1.2.000`
-- git remote: `https://github.com/novalupusstudio-arch/ceara.git`
-- main branch: `main`
+### Code / source
 
-Local machine-specific values live outside Git when possible:
+- `D:\Novalupusstudio\ceara`
 
-- `config/local.php` for DB connection
-- `config/xampp-target.local.txt` for the XAMPP sync target
+This is the only place where code should be edited.
 
-## Business Flows
+### DEV
 
-### 1. Processing / Custody Flow
+- code deploy: `D:\xampp\htdocs\ceara`
+- URL: `http://localhost/ceara/`
+- DB: `ceara`
+- runtime DB config: `D:\xampp\htdocs\ceara\config\local.php`
 
-Main pages:
+### STAGE
+
+- code deploy: `D:\xampp\htdocs\ceara_stage`
+- URL: `http://localhost/ceara_stage/`
+- DB: `ceara_stage`
+- runtime DB config: `D:\xampp\htdocs\ceara_stage\config\local.php`
+
+### PROD
+
+- code deploy: `../ceara`
+- URL: `https://www.stuparul.com/ceara/`
+- DB: `stuparul_ceara`
+- build-time DB config source: `deploy/local/config.php`
+- runtime DB config: `../ceara/config/local.php`
+
+## Current Version
+
+- `1.2.012`
+
+## Local Sync / Build Files
+
+- DEV sync script:
+  - `scripts/sync-to-xampp.ps1`
+- DEV target override:
+  - `config/xampp-target.local.txt`
+- STAGE target override:
+  - `config/xampp-stage-target.local.txt`
+- production build script:
+  - `scripts/build-production-zip.ps1`
+- production reset SQL:
+  - `deploy/sql/init-production.sql`
+
+## Main Business Flows
+
+### 1. Processing / custody
+
+Pages:
 
 - `processing`
 - `lots`
@@ -36,86 +69,31 @@ Main pages:
 - `factory_buffer`
 - `processing_register`
 
-Core operational flow:
+Important stock buckets:
 
-1. receive wax from customer and create processing lot
-2. optionally exchange some or all of that wax from local foundation buffer
-3. later send some or all remaining custody wax to processor/factory in batch
-4. factory may reject part of the sent wax
-5. rejected wax may be returned to the client or carried as loss/recovery work
-6. lot closes only when custody reaches zero and no remaining obligations stay open
+- `wax_custody`
+- `foundation_operational`
 
-Important clarification from business flow:
+Core interpretation:
 
-- when wax is exchanged from buffer, the client has already received foundations
-- `faguri de predat` means the additional theoretical quantity that can still be exchanged from wax still in custody, using the current shrinkage
-- factory rejection does not automatically block all future commercial exchange; the business may still choose to exchange on loss
+- exchanging foundations to client does not remove custody wax
+- custody wax leaves only when sent to factory, returned, or recorded as loss
 
-### 2. Purchase Flow
+### 2. Purchase
 
-Main pages:
+Pages:
 
 - `purchases`
 - `purchase_exit`
 - `purchase_register`
 
-This is separate from customer custody processing. Purchased wax belongs to the company and must never mix with custody wax.
+Important stock bucket:
 
-## Lot Statuses
+- `wax_purchased`
 
-There are two status layers in the app.
+Purchased wax must never mix with custody wax.
 
-### Persisted lot status fields
-
-Current database status values on `processing_lots` / status events:
-
-- `In Validare`
-- `Acceptat`
-- `Predat Fabricii`
-- `Respins`
-- `Returnat`
-
-These are legacy UI/status-event values and still exist for traceability.
-
-### Calculated operational lot states
-
-The current lot board uses calculated movement-based states:
-
-- `Procesare`
-- `Recuperare`
-- `Inchis`
-
-Meaning:
-
-- `Procesare`: normal active lot work
-- `Recuperare`: lot has recovery/rejected-foundation implications still open
-- `Inchis`: no wax remains in custody and no open pending balances remain
-
-New lot behavior currently expected:
-
-- a newly created lot immediately creates `PV-CUST`
-- the lot appears on the board with active work
-- `Acceptat` stays terminal on the board itself; moving wax to factory happens only from batch delivery page
-
-## Inventory Model
-
-Quantities are stored as integer grams and shown in UI as kilograms with 3 decimals.
-
-Strict stock buckets:
-
-- `wax_custody`: customer wax in custody
-- `foundation_operational`: operational foundations available locally
-- `wax_purchased`: company-owned purchased wax
-
-They must never mix.
-
-Current processing balance interpretation:
-
-- custody wax decreases only when wax is sent to factory, returned to customer, or recorded as loss
-- exchanging foundations to the customer does not itself remove custody wax
-- that is intentional because the raw wax remains physically in custody until factory transfer or return
-
-## Current Movement Model
+## Lot / Movement Logic
 
 Processing movement types:
 
@@ -128,120 +106,37 @@ Processing movement types:
 - `RECORD_LOSS`
 - `RECOVER_FOUNDATION_FROM_CLIENT`
 
-Key calculations now in services:
+Important current calculations:
 
-- custody wax = received - sent to factory - returned to client - wax loss
-- exchangeable wax = received - already exchanged - returned to client - wax loss
-- foundations still exchangeable = shrinkage-applied result of current exchangeable wax
-- open rejected wax = rejected - returned to client - wax loss
+- custody wax = received - sent to factory - returned - wax loss
+- exchangeable wax = received - exchanged - returned - wax loss
+- exchangeable foundations = shrinkage-applied result of exchangeable wax
+- open rejected wax = rejected - returned - wax loss
 
-This last rule is important: a factory rejection is considered resolved if that same wax has already been returned to the client.
+Operational calculated states:
 
-## User Roles
+- `Procesare`
+- `Recuperare`
+- `Inchis`
 
-Current roles:
+## User / Store Rule
 
-- `admin`
-- `operator`
-
-Current seeded reset login from `deploy/sql/init-production.sql`:
-
-- username: `admin`
-- password: `CearaAdmin!2026`
-
-Settings and permission behavior:
-
-- users can change their own password without entering old password
-- only the initial/admin-capable account should see role/permission management
-- user creation and user editing are admin-controlled
-- processors and stores/gestiuni are admin-managed
-
-Operational rule:
+Business rule:
 
 - one user works on one gestiune
 - one gestiune may have many users
 
-Current schema still uses `user_stores`, so the business rule is stricter than the raw table shape. The app should continue treating one active store per user as the intended rule.
+Important current behavior:
 
-## Document Types
+- a clean `init-production.sql` creates `admin` without any store
+- admin must still be able to log in and reach settings
+- dashboard therefore must not hard-fail when no store is assigned yet
 
-Current internal document types in active use:
+## Settings Model
 
-- `PV-CUST` - reception into custody
-- `PV-FAG` - exchange / handover of foundations to client
-- `PV-RET` - wax return to client
-- `AVIZ` - delivery toward processor/factory
-- `NIR` - reception note, including auto-generated NIR after factory delivery and buffer operations
-- `FACT` - invoice through third-party integration / mock path where applicable
-- `BON` - cash receipt / FiscalWire output or mock path
-- `BORD` - managed in document series even if some purchase/accounting flows remain partial
+Settings are admin-only.
 
-Document numbering:
-
-- internal counters live in `document_series`
-- numbering is per `store_id + document_type`
-- FGO invoice series lives in `stores.fgo_series`
-
-Current document behavior:
-
-- processing lot creation issues `PV-CUST`
-- client wax return issues `PV-RET`
-- factory buffer adjustments issue `NIR`
-- factory delivery now records `aviz_number` + `aviz_date` and auto-generates both `AVIZ` and `NIR`
-- processing register rows should link to the real stored document rows when documents exist
-
-## Current Architecture
-
-Stack:
-
-- plain PHP
-- MySQL
-- XAMPP runtime
-- server-rendered PHP views
-- light JS in `assets/app.js`
-- CSS in `assets/styles.css`
-- Dompdf committed in `vendor/`
-
-Current architectural direction:
-
-- `App.php` remains a thin facade
-- business logic should stay in services
-- UI views should not accumulate calculation logic
-
-Important services/folders:
-
-- `lib/ProcessingService.php`
-- `lib/ProcessingWriteService.php`
-- `lib/PurchaseService.php`
-- `lib/CustomerService.php`
-- `lib/SettingsService.php`
-- `lib/DocumentService.php`
-- `lib/ProcessingDocumentService.php`
-- `lib/FgoService.php`
-- `lib/FiscalWireService.php`
-- `lib/Documents/`
-- `lib/Http/`
-- `lib/Inventory/`
-
-## Important Business Rules
-
-- customer PF/PJ selection happens on the processing screen
-- PF requires name, phone, address
-- PJ requires company name, CUI, phone, address, representative
-- customer search is dynamic while typing: phone for PF, CUI for PJ
-- ANAF lookup is only a prefill helper; final saved values are whatever remains in the form at submit time
-- processor is preselected from the user store context and lot values snapshot from form values
-- processing price and shrinkage are mandatory on the lot and must not silently fall back in the backend
-- exchange from buffer cannot exceed available exchangeable wax or available operational foundations
-- return cannot exceed current custody wax
-- factory delivery is batch-based and scoped to one processor
-- factory delivery page currently works with both delivered and rejected quantities per lot
-- register document links should point to real documents, not plain text placeholders
-- lots with factory-rejected wax should display a red warning style in lot detail
-
-## Recommended First-Run Settings Order
-
-Current preferred order in `Setari`:
+Key areas:
 
 1. `Date societate`
 2. `Procesatori`
@@ -250,23 +145,54 @@ Current preferred order in `Setari`:
 5. `Roluri si drepturi`
 6. `Creare useri`
 7. `Template documente`
-8. `Schimba parola`
+8. `Backup si sync`
 
-## Deployment Notes
+Important split:
 
-Local deploy flow on this machine:
+- store values = defaults for relation with client
+- processor values = relation with factory
+- lot values = snapshot used by operations/documents for that lot
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\sync-to-xampp.ps1
-```
+## Documents
 
-Production/local reset SQL:
+Current document families in active use:
 
-- `deploy/sql/init-production.sql`
+- `PV-CUST`
+- `PV-FAG`
+- `PV-RET`
+- `AVIZ`
+- `NIR`
+- `FACT`
+- `BON`
+- `BORD`
 
-Production package guidance:
+Important numbering rule:
 
-- `deploy/DEPLOY_PRODUCTION.md`
-- `deploy/output/`
+- internal documents are per `store + document type`
+- invoice series for FGO lives in the store
 
-The intended model is to keep source in Git, sync to local XAMPP for testing, and be able to continue work from another PC with the same repo plus matching DB/bootstrap setup.
+## Production Notes
+
+Current known-good full package:
+
+- `deploy/output/ceara-production-20260624-143740.zip`
+
+Current patch package:
+
+- `deploy/output/ceara-production-patch-1.2.011-20260624.zip`
+
+Current seeded clean reset login:
+
+- user: `admin`
+- password: `CearaAdmin!2026`
+
+## Recommended Release Workflow
+
+1. code in `D:\Novalupusstudio\ceara`
+2. sync to DEV
+3. test freely in DEV
+4. sync candidate to STAGE
+5. import production backup into STAGE when needed
+6. re-enter FGO URL/token after import
+7. validate in STAGE
+8. deploy the same candidate to PROD

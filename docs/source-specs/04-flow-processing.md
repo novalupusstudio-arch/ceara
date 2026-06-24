@@ -39,6 +39,12 @@ Customer behavior:
 
 No silent fallback should happen if required values are missing.
 
+Bootstrap exception:
+
+- initial admin after clean init may have no assigned store
+- admin must still be able to log in and reach settings/dashboard warning state
+- operational pages still require assigned store
+
 ## Exchange / Return
 
 - exchange cannot exceed exchangeable wax
