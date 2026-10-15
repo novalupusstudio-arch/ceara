@@ -161,11 +161,11 @@ final class ProcessingWriteService
         $store = $this->requireUserPrimaryStore($userId);
         $storeId = (int) $store['id'];
         $avizNumber = trim((string) ($data['aviz_number'] ?? ''));
-        $avizDate = $this->normalizeDate((string) ($data['aviz_date'] ?? '')) ?: date('Y-m-d');
-        $receptionDate = $this->normalizeDate((string) ($data['reception_date'] ?? '')) ?: date('Y-m-d');
+        $avizDate = $this->normalizeDate((string) ($data['aviz_date'] ?? ''));
+        $receptionDate = $this->normalizeDate((string) ($data['reception_date'] ?? ''));
         $qty = kg_to_grams((string) ($data['qty_kg'] ?? '0'));
         $notes = trim((string) ($data['notes'] ?? ''));
-        if ($avizNumber === '') {
+        if ($type === 'plus' && $avizNumber === '') {
             throw new RuntimeException('Numarul avizului este obligatoriu.');
         }
         if ($avizDate === '') {
@@ -185,6 +185,9 @@ final class ProcessingWriteService
 
         $this->pdo->beginTransaction();
         try {
+            $time = (string) $this->pdo->query('SELECT TIME(NOW())')->fetchColumn();
+            $avizDateTime = $avizDate . ' ' . $time;
+            $receptionDateTime = $receptionDate . ' ' . $time;
             $stmt = $this->pdo->prepare(
                 'INSERT INTO factory_buffer_adjustments
                 (adjustment_type, aviz_number, aviz_date, reception_date, qty_g, store_id, notes, created_by)
@@ -199,11 +202,37 @@ final class ProcessingWriteService
                 $storeId,
                 'factory_buffer_adjustment',
                 $adjustmentId,
-                'Aviz buffer fabrica ' . strtoupper($type) . ' ' . $avizNumber
+                'Aviz buffer fabrica ' . strtoupper($type) . ' ' . $avizNumber,
+                $type === 'plus' ? $receptionDateTime : $avizDateTime
             );
-            $this->documents->issue('NIR', 'factory_buffer_adjustment', $adjustmentId, $storeId, 'issued', 'NIR buffer fabrica pentru aviz ' . $avizNumber, [
-                'created_by' => $userId,
-            ]);
+            if ($type === 'plus') {
+                $this->documents->issue('NIR', 'factory_buffer_adjustment', $adjustmentId, $storeId, 'issued', 'NIR buffer fabrica pentru aviz ' . $avizNumber, [
+                    'created_by' => $userId,
+                    'created_at' => $receptionDateTime,
+                ]);
+            } else {
+                $returnSeries = 'RET-' . strtoupper((string) $store['code']);
+                $this->pdo->prepare(
+                    'INSERT IGNORE INTO document_series (store_id, document_type, series, next_number) VALUES (?, "AVIZ-RETUR", ?, 1)'
+                )->execute([$storeId, $returnSeries]);
+                $documentId = $this->documents->issue(
+                    'AVIZ-RETUR',
+                    'factory_buffer_adjustment',
+                    $adjustmentId,
+                    $storeId,
+                    'issued',
+                    'Aviz retur faguri catre fabrica',
+                    ['created_by' => $userId, 'created_at' => $avizDateTime]
+                );
+                $documentStmt = $this->pdo->prepare('SELECT series, number FROM documents WHERE id = ?');
+                $documentStmt->execute([$documentId]);
+                $returnDocument = $documentStmt->fetch();
+                if ($returnDocument) {
+                    $avizNumber = (string) $returnDocument['series'] . '-' . str_pad((string) $returnDocument['number'], 3, '0', STR_PAD_LEFT);
+                    $this->pdo->prepare('UPDATE factory_buffer_adjustments SET aviz_number = ? WHERE id = ?')
+                        ->execute([$avizNumber, $adjustmentId]);
+                }
+            }
             $this->logAudit($userId, 'FACTORY_BUFFER_' . strtoupper($type), 'factory_buffer_adjustments', $adjustmentId, null, $avizNumber);
 
             $this->pdo->commit();
@@ -253,13 +282,17 @@ final class ProcessingWriteService
         $store = $this->requireUserPrimaryStore($userId);
         $processorId = (int) ($data['processor_id'] ?? 0);
         $avizNumber = trim((string) ($data['aviz_number'] ?? ''));
-        $avizDate = $this->normalizeDate((string) ($data['aviz_date'] ?? '')) ?: date('Y-m-d');
+        $avizDate = $this->normalizeDate((string) ($data['aviz_date'] ?? ''));
+        $processorInvoiceNumber = trim((string) ($data['processor_invoice_number'] ?? ''));
         $processor = $this->find('processors', $processorId);
         if (!$processor) {
             throw new RuntimeException('Procesatorul selectat nu exista.');
         }
         if ($avizNumber === '') {
             throw new RuntimeException('Numarul avizului este obligatoriu.');
+        }
+        if ($avizDate === '') {
+            throw new RuntimeException('Data avizului este obligatorie.');
         }
 
         $lotsInput = $data['lot_qty'] ?? [];
@@ -270,6 +303,7 @@ final class ProcessingWriteService
 
         $this->pdo->beginTransaction();
         try {
+            $documentDateTime = $avizDate . ' ' . $this->pdo->query('SELECT TIME(NOW())')->fetchColumn();
             $selectedLots = [];
             $totalWax = 0;
             $totalFoundation = 0;
@@ -312,17 +346,33 @@ final class ProcessingWriteService
                 ];
                 $totalWax += $qty;
                 $totalFoundation += $foundationQty;
-                $totalCostCents += (int) round(($qty / 1000) * (int) $processor['processing_price_cents']);
             }
 
             if (!$selectedLots) {
                 throw new RuntimeException('Nu exista cantitati valide pentru predare sau respingere.');
             }
 
+            $foundationInput = trim((string) ($data['foundation_kg'] ?? ''));
+            if ($foundationInput !== '') {
+                $totalFoundation = kg_to_grams($foundationInput);
+                if ($totalFoundation < 0) {
+                    throw new RuntimeException('Cantitatea de faguri nu poate fi negativa.');
+                }
+            }
+
+            $defaultCostCents = (int) round(($totalFoundation / 1000) * (int) $processor['processing_price_cents']);
+            $costInput = trim((string) ($data['processing_cost'] ?? ''));
+            $totalCostCents = $costInput === ''
+                ? $defaultCostCents
+                : (int) round(((float) str_replace(',', '.', $costInput)) * 100);
+            if ($totalCostCents < 0) {
+                throw new RuntimeException('Costul de procesare nu poate fi negativ.');
+            }
+
             $batchNumber = $this->nextLotNumber('FAB');
             $stmt = $this->pdo->prepare(
-                'INSERT INTO factory_batches (batch_number, processor_id, store_id, aviz_number, aviz_date, wax_g, foundation_g, processing_cost_cents, created_by)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                'INSERT INTO factory_batches (batch_number, processor_id, store_id, aviz_number, aviz_date, processor_invoice_number, wax_g, foundation_g, processing_cost_cents, created_by, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
             );
             $stmt->execute([
                 $batchNumber,
@@ -330,10 +380,12 @@ final class ProcessingWriteService
                 (int) $store['id'],
                 $avizNumber,
                 $avizDate,
+                $processorInvoiceNumber,
                 $totalWax,
                 $totalFoundation,
                 $totalCostCents,
                 $userId,
+                $documentDateTime,
             ]);
             $batchId = (int) $this->pdo->lastInsertId();
 
@@ -344,31 +396,33 @@ final class ProcessingWriteService
                 $foundationQty = $item['foundation_qty'];
                 if ($qty > 0) {
                     $this->pdo->prepare(
-                        'INSERT INTO factory_batch_items (batch_id, processing_lot_id, wax_g) VALUES (?, ?, ?)'
-                    )->execute([$batchId, (int) $lot['id'], $qty]);
+                        'INSERT INTO factory_batch_items (batch_id, processing_lot_id, wax_g, created_at) VALUES (?, ?, ?, ?)'
+                    )->execute([$batchId, (int) $lot['id'], $qty, $documentDateTime]);
 
                     $newSent = (int) $lot['factory_sent_g'] + $qty;
                     $this->pdo->prepare(
                         'UPDATE processing_lots SET factory_sent_g = ? WHERE id = ?'
                     )->execute([$newSent, (int) $lot['id']]);
-                    $this->processingMovement((int) $lot['id'], 'SEND_WAX_TO_FACTORY', $qty, 0, 0, 'Predare batch ' . $batchNumber, $userId);
-                    $this->processingMovement((int) $lot['id'], 'RECEIVE_FOUNDATION_FROM_FACTORY', 0, $foundationQty, 0, 'Receptie automata batch ' . $batchNumber, $userId);
+                    $this->processingMovement((int) $lot['id'], 'SEND_WAX_TO_FACTORY', $qty, 0, 0, 'Predare batch ' . $batchNumber, $userId, $documentDateTime);
+                    $this->processingMovement((int) $lot['id'], 'RECEIVE_FOUNDATION_FROM_FACTORY', 0, $foundationQty, 0, 'Receptie automata batch ' . $batchNumber, $userId, $documentDateTime);
                 }
                 if ($rejectQty > 0) {
-                    $this->processingMovement((int) $lot['id'], 'FACTORY_REJECT_WAX', $rejectQty, 0, 0, 'Respingere fabrica batch ' . $batchNumber, $userId);
+                    $this->processingMovement((int) $lot['id'], 'FACTORY_REJECT_WAX', $rejectQty, 0, 0, 'Respingere fabrica batch ' . $batchNumber, $userId, $documentDateTime);
                 }
             }
 
             if ($totalWax > 0) {
-                $this->inventory->record('wax_custody', -$totalWax, (int) $store['id'], 'factory_batch', $batchId, 'Ceara trimisa la procesator');
-                $this->inventory->record('foundation_operational', $totalFoundation, (int) $store['id'], 'factory_batch', $batchId, 'Faguri primiti de la procesator');
+                $this->inventory->record('wax_custody', -$totalWax, (int) $store['id'], 'factory_batch', $batchId, 'Ceara trimisa la procesator', $documentDateTime);
+                $this->inventory->record('foundation_operational', $totalFoundation, (int) $store['id'], 'factory_batch', $batchId, 'Faguri primiti de la procesator', $documentDateTime);
                 $this->documents->issue('AVIZ', 'factory_batch', $batchId, (int) $store['id'], 'issued', 'Aviz catre procesator', [
                     'factory_batch_id' => $batchId,
                     'created_by' => $userId,
+                    'created_at' => $documentDateTime,
                 ]);
                 $this->documents->issue('NIR', 'factory_batch', $batchId, (int) $store['id'], 'issued', 'NIR pentru aviz ' . $avizNumber, [
                     'factory_batch_id' => $batchId,
                     'created_by' => $userId,
+                    'created_at' => $documentDateTime,
                 ]);
             }
             $this->logAudit($userId, 'FACTORY_BATCH_CREATE', 'factory_batches', $batchId, null, $batchNumber);
@@ -488,13 +542,13 @@ final class ProcessingWriteService
         return max(0, (int) round($wax * (1 - ($shrinkagePct / 100))));
     }
 
-    private function processingMovement(int $lotId, string $type, int $wax, int $foundation, int $serviceValue, string $notes, int $userId): int
+    private function processingMovement(int $lotId, string $type, int $wax, int $foundation, int $serviceValue, string $notes, int $userId, ?string $createdAt = null): int
     {
         $this->pdo->prepare(
             'INSERT INTO processing_lot_movements
-            (lot_id, movement_type, wax_g, foundation_g, service_value_cents, notes, created_by)
-             VALUES (?, ?, ?, ?, ?, ?, ?)'
-        )->execute([$lotId, $type, $wax, $foundation, $serviceValue, $notes, $userId]);
+            (lot_id, movement_type, wax_g, foundation_g, service_value_cents, notes, created_by, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))'
+        )->execute([$lotId, $type, $wax, $foundation, $serviceValue, $notes, $userId, $createdAt]);
 
         return (int) $this->pdo->lastInsertId();
     }

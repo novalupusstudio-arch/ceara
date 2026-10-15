@@ -123,6 +123,33 @@ final class App
         return $this->processingService()->processingRegisterData($userId, $dateStart, $dateEnd);
     }
 
+    public function processingFeeReceiptsReport(
+        int $userId,
+        string $dateStart = '',
+        string $dateEnd = '',
+        string $period = '',
+        int $page = 1
+    ): array {
+        return $this->processingService()->processingFeeReceiptsReport($userId, $dateStart, $dateEnd, $period, $page);
+    }
+
+    public function processingFeeReceiptsPdf(int $userId, string $dateStart = '', string $dateEnd = ''): string
+    {
+        $report = $this->processingService()->processingFeeReceiptsReport(
+            $userId,
+            $dateStart,
+            $dateEnd,
+            '',
+            1,
+            0
+        );
+
+        return (new \Ceara\Reports\ProcessingFeeRegisterPdf())->render(
+            $report,
+            $this->companySettings()
+        );
+    }
+
     public function processingLotDetail(int $lotId, int $userId): array
     {
         return $this->processingService()->processingLotDetail($lotId, $userId, fn (int $id, int $storeId) => $this->processingService()->processingLotSummary($id, $storeId));
@@ -351,6 +378,9 @@ final class App
         $series = trim((string) ($document['series'] ?? ''));
         $number = trim((string) ($document['number'] ?? ''));
         $type = trim((string) ($document['document_type'] ?? ''));
+        if ($type === 'AVIZ-RETUR' && (int) $number > 0) {
+            $number = str_pad((string) (int) $number, 3, '0', STR_PAD_LEFT);
+        }
         $label = trim($series . '-' . $number, '-');
 
         if ($label === '') {
@@ -388,7 +418,7 @@ final class App
 
     private function processingService(): ProcessingService
     {
-        return new ProcessingService($this->pdo, $this->inventoryService());
+        return new ProcessingService($this->pdo, $this->inventoryService(), $this->config);
     }
 
     private function processingWriteService(): \Ceara\ProcessingWriteService

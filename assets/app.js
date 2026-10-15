@@ -57,8 +57,8 @@ document.addEventListener("DOMContentLoaded", () => {
           rejectInput.value = rowRejectKg.toFixed(3);
         }
 
-        const rowCostCents = Math.max(0, Math.round(qtyKg * priceCents));
         const rowFoundationKg = Math.max(0, qtyKg * (1 - (shrinkagePct / 100)));
+        const rowCostCents = Math.max(0, Math.round(rowFoundationKg * priceCents));
 
         waxKg += qtyKg;
         rejectKg += rowRejectKg;
@@ -71,13 +71,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
       totalWax.value = formatKg(waxKg);
       totalReject.value = formatKg(rejectKg);
-      totalCost.value = `${(costCents / 100).toFixed(2)} lei`;
-      totalFoundation.value = formatKg(foundationKg);
+      totalCost.value = (costCents / 100).toFixed(2);
+      totalFoundation.value = foundationKg.toFixed(3);
     }
 
     factoryForm.querySelectorAll("[data-factory-qty], [data-factory-reject-qty]").forEach((input) => {
       input.addEventListener("input", renderFactoryTotals);
       input.addEventListener("change", renderFactoryTotals);
+    });
+
+    totalFoundation.addEventListener("input", () => {
+      const foundationKg = Math.max(0, parseKg(totalFoundation.value));
+      const priceCents = Number(factoryForm.dataset.priceCents || 0);
+      totalCost.value = (Math.round(foundationKg * priceCents) / 100).toFixed(2);
     });
 
     renderFactoryTotals();

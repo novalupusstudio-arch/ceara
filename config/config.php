@@ -3,6 +3,7 @@
 $config = [
     'app_name' => 'Ceara',
     'app_version' => '1.2.012',
+    'vat_rate' => 21,
     'seed_defaults' => getenv('CEARA_SEED_DEFAULTS') === '1',
     'db' => [
         'host' => getenv('CEARA_DB_HOST') ?: '',

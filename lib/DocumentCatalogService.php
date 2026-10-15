@@ -64,6 +64,9 @@ final class DocumentCatalogService
         $series = trim((string) ($document['series'] ?? ''));
         $number = trim((string) ($document['number'] ?? ''));
         $type = trim((string) ($document['document_type'] ?? ''));
+        if ($type === 'AVIZ-RETUR' && (int) $number > 0) {
+            $number = str_pad((string) (int) $number, 3, '0', STR_PAD_LEFT);
+        }
         $label = trim($series . '-' . $number, '-');
         if ($label === '') {
             $label = $type ?: 'Document';

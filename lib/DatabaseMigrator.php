@@ -125,6 +125,7 @@ final class DatabaseMigrator
                     store_id INT NOT NULL,
                     aviz_number VARCHAR(80) NOT NULL DEFAULT '',
                     aviz_date DATE NULL,
+                    processor_invoice_number VARCHAR(100) NOT NULL DEFAULT '',
                     wax_g INT NOT NULL,
                     foundation_g INT NOT NULL,
                     processing_cost_cents INT NOT NULL DEFAULT 0,
@@ -141,6 +142,9 @@ final class DatabaseMigrator
             }
             if (!$this->pdo->query("SHOW COLUMNS FROM factory_batches LIKE 'aviz_date'")->fetch()) {
                 $this->pdo->exec("ALTER TABLE factory_batches ADD aviz_date DATE NULL AFTER aviz_number");
+            }
+            if (!$this->pdo->query("SHOW COLUMNS FROM factory_batches LIKE 'processor_invoice_number'")->fetch()) {
+                $this->pdo->exec("ALTER TABLE factory_batches ADD processor_invoice_number VARCHAR(100) NOT NULL DEFAULT '' AFTER aviz_date");
             }
         }
 

@@ -48,6 +48,10 @@ $store = $data['store'] ?? [];
                 Data aviz
                 <input type="date" name="aviz_date" required value="<?= h(date('Y-m-d')) ?>">
             </label>
+            <label>
+                Factura procesare fabrica
+                <input name="processor_invoice_number" placeholder="Numar factura / referinta">
+            </label>
         </div>
 
         <div class="factory-totals">
@@ -60,12 +64,12 @@ $store = $data['store'] ?? [];
                 <input value="0,000 kg" readonly data-factory-total-reject>
             </label>
             <label>
-                Cost procesare
-                <input value="0.00 lei" readonly data-factory-total-cost>
+                Cost procesare fabrica (lei)
+                <input type="number" name="processing_cost" value="0.00" min="0" step="0.01" data-factory-total-cost>
             </label>
             <label>
-                Faguri de primit
-                <input value="0,000 kg" readonly data-factory-total-foundation>
+                Faguri de primit (kg)
+                <input type="number" name="foundation_kg" value="0.000" min="0" step="0.001" data-factory-total-foundation>
             </label>
         </div>
 

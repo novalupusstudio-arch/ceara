@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 final class ProcessingService
 {
-    public function __construct(private PDO $pdo, private \Ceara\Inventory\InventoryService $inventory)
+    public function __construct(
+        private PDO $pdo,
+        private \Ceara\Inventory\InventoryService $inventory,
+        private array $config = []
+    )
     {
     }
 
@@ -83,8 +87,8 @@ final class ProcessingService
 
                 $remaining = (int) $summary['wax_custody_g'];
                 $selected = $remaining;
-                $cost = (int) round(($selected / 1000) * (int) $selectedProcessor['processing_price_cents']);
                 $foundation = max(0, (int) round($selected * (1 - (((float) $selectedProcessor['exchange_shrinkage_pct']) / 100))));
+                $cost = (int) round(($foundation / 1000) * (int) $selectedProcessor['processing_price_cents']);
 
                 $rows[] = [
                     'lot' => $lot,
@@ -142,13 +146,13 @@ final class ProcessingService
         $store = $this->requireUserPrimaryStore($userId);
         $stmt = $this->pdo->prepare(
             'SELECT a.*, s.name AS store_name, u.username,
-                    d.id AS nir_document_id, d.series AS nir_series, d.number AS nir_number, d.document_type AS nir_type
+                    d.id AS document_id, d.series AS document_series, d.number AS document_number, d.document_type
              FROM factory_buffer_adjustments a
              JOIN stores s ON s.id = a.store_id
              JOIN users u ON u.id = a.created_by
              LEFT JOIN documents d ON d.reference_type = "factory_buffer_adjustment"
                 AND d.reference_id = a.id
-                AND d.document_type = "NIR"
+                AND d.document_type = CASE WHEN a.adjustment_type = "minus" THEN "AVIZ-RETUR" ELSE "NIR" END
              WHERE a.store_id = ?
              ORDER BY a.id DESC
              LIMIT 100'
@@ -221,6 +225,141 @@ final class ProcessingService
             'movements' => $movements,
             'documents' => $this->documentsForLot($lotId),
             'foundation_stock_g' => $this->inventory->sumForStore('foundation_operational', $storeId),
+        ];
+    }
+
+    public function processingFeeReceiptsReport(
+        int $userId,
+        string $dateStart = '',
+        string $dateEnd = '',
+        string $period = '',
+        int $page = 1,
+        int $perPage = 50
+    ): array {
+        $store = $this->requireUserPrimaryStore($userId);
+
+        if ($period === 'previous_month') {
+            $dateStart = date('Y-m-01', strtotime('first day of previous month'));
+            $dateEnd = date('Y-m-t', strtotime('last day of previous month'));
+        } else {
+            $dateStart = $this->normalizeDate($dateStart) ?: date('Y-m-01');
+            $dateEnd = $this->normalizeDate($dateEnd) ?: date('Y-m-d');
+        }
+        if ($dateStart > $dateEnd) {
+            [$dateStart, $dateEnd] = [$dateEnd, $dateStart];
+        }
+
+        $periodStart = $dateStart . ' 00:00:00';
+        $periodEnd = $dateEnd . ' 23:59:59';
+        $storeId = (int) $store['id'];
+        $vatRate = max(0, (int) ($this->config['vat_rate'] ?? 21));
+        $vatDivisor = 100 + $vatRate;
+
+        $countStmt = $this->pdo->prepare(
+            'SELECT COUNT(DISTINCT DATE(d.created_at))
+             FROM (
+                 SELECT movement_id, store_id, MIN(created_at) AS created_at
+                 FROM documents
+                 WHERE document_type = "BON" AND movement_id IS NOT NULL
+                 GROUP BY movement_id, store_id
+             ) d
+             JOIN processing_lot_movements m ON m.id = d.movement_id
+             JOIN processing_lots p ON p.id = m.lot_id
+             WHERE d.store_id = ?
+               AND m.movement_type = "EXCHANGE_WAX_WITH_CLIENT"
+               AND m.service_value_cents > 0
+               AND d.created_at BETWEEN ? AND ?'
+        );
+        $countStmt->execute([$storeId, $periodStart, $periodEnd]);
+        $totalRows = (int) $countStmt->fetchColumn();
+        $totalPages = $perPage > 0 ? max(1, (int) ceil($totalRows / $perPage)) : 1;
+        $page = max(1, min($page, $totalPages));
+        $offset = $perPage > 0 ? ($page - 1) * $perPage : 0;
+
+        $totalsStmt = $this->pdo->prepare(
+            'SELECT COUNT(DISTINCT m.id) AS receipt_count,
+                    COALESCE(SUM(CASE WHEN d.is_card = 1 THEN 0 ELSE m.service_value_cents END), 0) AS cash_cents,
+                    COALESCE(SUM(CASE WHEN d.is_card = 1 THEN m.service_value_cents ELSE 0 END), 0) AS card_cents,
+                    COALESCE(SUM(ROUND(m.service_value_cents * 100 / ?)), 0) AS net_cents,
+                    COALESCE(SUM(m.service_value_cents), 0) AS total_cents
+             FROM (
+                 SELECT movement_id, store_id, MIN(created_at) AS created_at,
+                        MAX(CASE WHEN LOWER(notes) LIKE "%card%" THEN 1 ELSE 0 END) AS is_card
+                 FROM documents
+                 WHERE document_type = "BON" AND movement_id IS NOT NULL
+                 GROUP BY movement_id, store_id
+             ) d
+             JOIN processing_lot_movements m ON m.id = d.movement_id
+             JOIN processing_lots p ON p.id = m.lot_id
+             WHERE d.store_id = ?
+               AND m.movement_type = "EXCHANGE_WAX_WITH_CLIENT"
+               AND m.service_value_cents > 0
+               AND d.created_at BETWEEN ? AND ?'
+        );
+        $totalsStmt->execute([$vatDivisor, $storeId, $periodStart, $periodEnd]);
+        $totals = $totalsStmt->fetch() ?: [];
+
+        $rowsStmt = $this->pdo->prepare(
+            'SELECT DATE(d.created_at) AS receipt_date,
+                    COUNT(DISTINCT m.id) AS receipt_count,
+                    SUM(CASE WHEN d.is_card = 1 THEN 0 ELSE m.service_value_cents END) AS cash_cents,
+                    SUM(CASE WHEN d.is_card = 1 THEN m.service_value_cents ELSE 0 END) AS card_cents,
+                    SUM(ROUND(m.service_value_cents * 100 / ?)) AS net_cents,
+                    SUM(m.service_value_cents) AS total_cents
+             FROM (
+                 SELECT movement_id, store_id, MIN(created_at) AS created_at,
+                        MAX(CASE WHEN LOWER(notes) LIKE "%card%" THEN 1 ELSE 0 END) AS is_card
+                 FROM documents
+                 WHERE document_type = "BON" AND movement_id IS NOT NULL
+                 GROUP BY movement_id, store_id
+             ) d
+             JOIN processing_lot_movements m ON m.id = d.movement_id
+             JOIN processing_lots p ON p.id = m.lot_id
+             WHERE d.store_id = ?
+               AND m.movement_type = "EXCHANGE_WAX_WITH_CLIENT"
+               AND m.service_value_cents > 0
+               AND d.created_at BETWEEN ? AND ?
+             GROUP BY DATE(d.created_at)
+             ORDER BY receipt_date DESC
+             ' . ($perPage > 0 ? 'LIMIT ? OFFSET ?' : '')
+        );
+        $rowsStmt->bindValue(1, $vatDivisor, PDO::PARAM_INT);
+        $rowsStmt->bindValue(2, $storeId, PDO::PARAM_INT);
+        $rowsStmt->bindValue(3, $periodStart);
+        $rowsStmt->bindValue(4, $periodEnd);
+        if ($perPage > 0) {
+            $rowsStmt->bindValue(5, $perPage, PDO::PARAM_INT);
+            $rowsStmt->bindValue(6, $offset, PDO::PARAM_INT);
+        }
+        $rowsStmt->execute();
+
+        $rows = array_map(static function (array $row): array {
+            $row['vat_cents'] = (int) $row['total_cents'] - (int) $row['net_cents'];
+            return $row;
+        }, $rowsStmt->fetchAll());
+        $netCents = (int) ($totals['net_cents'] ?? 0);
+        $totalCents = (int) ($totals['total_cents'] ?? 0);
+
+        return [
+            'store' => $store,
+            'date_start' => $dateStart,
+            'date_end' => $dateEnd,
+            'vat_rate' => $vatRate,
+            'rows' => $rows,
+            'totals' => [
+                'receipt_count' => (int) ($totals['receipt_count'] ?? 0),
+                'cash_cents' => (int) ($totals['cash_cents'] ?? 0),
+                'card_cents' => (int) ($totals['card_cents'] ?? 0),
+                'net_cents' => $netCents,
+                'vat_cents' => $totalCents - $netCents,
+                'total_cents' => $totalCents,
+            ],
+            'pagination' => [
+                'page' => $page,
+                'per_page' => max(0, $perPage),
+                'total_rows' => $totalRows,
+                'total_pages' => $totalPages,
+            ],
         ];
     }
 
@@ -400,7 +539,10 @@ final class ProcessingService
                 $nirDocument = $this->findDocumentByReference('factory_batch', (int) $row['id'], 'NIR');
                 return [
                     'partner' => (string) $row['processor_name'],
-                    'lot_number' => (string) ($row['aviz_number'] ?: $row['batch_number']),
+                    'lot_number' => trim(
+                        (string) ($row['aviz_number'] ?: $row['batch_number'])
+                        . (!empty($row['processor_invoice_number']) ? ' / Factura ' . $row['processor_invoice_number'] : '')
+                    ),
                     'lot_url' => '',
                     'document' => $this->documentLink($nirDocument, 'NIR'),
                     'operator' => (string) $row['username'],
@@ -420,12 +562,17 @@ final class ProcessingService
             $stmt->execute([$referenceId]);
             $row = $stmt->fetch();
             if ($row) {
-                $document = $this->findDocumentByReference('factory_buffer_adjustment', (int) $row['id'], 'NIR');
+                $documentType = $row['adjustment_type'] === 'minus' ? 'AVIZ-RETUR' : 'NIR';
+                $document = $this->findDocumentByReference('factory_buffer_adjustment', (int) $row['id'], $documentType);
+                $documentLink = $this->documentLink($document, $documentType);
+                if ($documentType === 'AVIZ-RETUR') {
+                    $documentLink['label'] = 'AVIZ';
+                }
                 return [
                     'partner' => (string) $row['store_name'],
                     'lot_number' => '',
                     'lot_url' => '',
-                    'document' => $this->documentLink($document, 'NIR'),
+                    'document' => $documentLink,
                     'operator' => (string) $row['username'],
                     'created_at' => $row['created_at'],
                 ];

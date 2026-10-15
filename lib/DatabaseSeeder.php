@@ -88,7 +88,7 @@ final class DatabaseSeeder
              LEFT JOIN documents d ON d.reference_type = 'factory_buffer_adjustment'
                 AND d.reference_id = a.id
                 AND d.document_type = 'NIR'
-             WHERE d.id IS NULL"
+             WHERE a.adjustment_type = 'plus' AND d.id IS NULL"
         )->fetchAll(PDO::FETCH_ASSOC);
 
         foreach ($rows as $row) {
@@ -102,8 +102,8 @@ final class DatabaseSeeder
             $number = (int) $series['next_number'];
             $this->pdo->prepare(
                 'INSERT INTO documents
-                (document_type, series, number, store_id, factory_batch_id, reference_type, reference_id, status, notes, created_by)
-                VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)'
+                (document_type, series, number, store_id, factory_batch_id, reference_type, reference_id, status, notes, created_by, created_at)
+                VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)'
             )->execute([
                 'NIR',
                 $series['series'],
@@ -114,6 +114,7 @@ final class DatabaseSeeder
                 'issued',
                 'NIR buffer fabrica pentru aviz ' . $row['aviz_number'],
                 (int) $row['created_by'],
+                $row['reception_date'] . ' ' . date('H:i:s'),
             ]);
             $this->pdo->prepare('UPDATE document_series SET next_number = next_number + 1 WHERE id = ?')
                 ->execute([(int) $series['id']]);

@@ -1,18 +1,16 @@
 # Deploy productie
 
-## Modelul curent de deploy
+## Actualizare peste datele existente
 
-Acest proiect este pregatit acum pentru deploy complet, de la zero:
+Productia are date reale. Nu rula `deploy/sql/init-production.sql` si nu importa baza DEV peste baza de productie. Scriptul de reset ramane numai local si este exclus din pachetul de productie.
 
-1. stergi toate fisierele vechi din folderul aplicatiei de pe server
-2. incarci arhiva noua
-3. dezarhivezi tot continutul in folderul aplicatiei
-4. rulezi resetul complet al bazei de date
-5. intri in app si configurezi datele operationale din setari
-
-Folder tinta:
-
-- `../ceara`
+1. Testeaza aceeasi versiune pe STAGE, folosind o copie recenta a bazei de productie. Verifica predarea si returul la fabrica, NIR/AVIZ, registrul de gestiune si raportul de incasari.
+2. Fa backup la baza de productie si la folderul aplicatiei, inclusiv `storage/`, `uploads/` si `config/local.php`. Verifica faptul ca backupurile pot fi restaurate.
+3. Verifica `deploy/local/config.php` inainte de construirea pachetului: acesta devine `config/local.php` in arhiva si trebuie sa indice baza de productie.
+4. Construieste pachetul si verifica faptul ca nu contine `deploy/sql/init-production.sql`.
+5. In fereastra de mentenanta, inlocuieste numai fisierele aplicatiei cu cele din arhiva. Pastreaza datele din `storage/` si `uploads/`; nu sterge folderul aplicatiei si nu reseta baza de date.
+6. La prima accesare, aplicatia executa migrarile incrementale prin `Database::migrateAndSeed()`. Verifica erorile, apoi fluxurile principale si documentele deja emise.
+7. Daca apar probleme, revino la backupul codului si, daca migrarile au schimbat schema, restaureaza si backupul bazei facut in acelasi moment.
 
 ## Pachetul zip
 
@@ -27,19 +25,20 @@ Scriptul include in arhiva:
 - codul aplicatiei
 - `vendor/`
 - `release/siruta.csv`
-- `deploy/sql/init-production.sql`
 - documentatia de deploy
 - `deploy/local/config.php` injectat ca `config/local.php`
 
+Nu include resetul SQL, `storage/` sau `uploads/`.
+
 `deploy/local/config.php` este ignorat de Git si trebuie sa existe local pe masina care construieste zip-ul.
 
-## Reset complet DB
+## Reset local, niciodata in productie
 
 Fisier:
 
 - `deploy/sql/init-production.sql`
 
-Acest script este distructiv pentru baza selectata:
+Acest script este distructiv pentru baza selectata si nu se foloseste la actualizarea productiei:
 
 - sterge toate tabelele aplicatiei
 - recreeaza schema curenta
@@ -61,14 +60,14 @@ Nu creeaza:
 
 SIRUTA si template-urile de documente sunt seed-uite de aplicatie la prima rulare.
 
-## Primul login dupa reset
+## Primul login dupa un reset local
 
 - user: `admin`
 - parola: `CearaAdmin!2026`
 
 Schimba parola imediat dupa primul login.
 
-## Configurare dupa primul login
+## Configurare dupa un reset local
 
 Ordinea recomandata:
 
@@ -93,8 +92,6 @@ Ordinea recomandata:
 - daca lipsesc procesatorul gestiunii, seria FGO, seriile interne sau tokenul/URL-ul FGO, fluxurile vor da eroare explicit
 - asta este intentionat
 
-## Update incremental ulterior
+## Migrari incrementale
 
-Dupa ce productia va avea date reale, nu mai folosi `deploy/sql/init-production.sql` pentru update-uri.
-
-Pentru update-uri ulterioare, ruleaza doar scripturile SQL punctuale pregatite pentru acea versiune.
+La deschiderea aplicatiei, `Database::migrateAndSeed()` ruleaza schema si migrarile conditionale. Testeaza-le pe copia recenta a bazei de productie in STAGE inainte de deploy; nu aplica manual resetul SQL.

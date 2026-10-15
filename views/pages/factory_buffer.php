@@ -37,8 +37,8 @@ $today = (string) ($data['today'] ?? date('Y-m-d'));
         </label>
 
         <label>
-            Numar aviz fabrica
-            <input name="aviz_number" required placeholder="AVZ-001">
+            Numar aviz fabrica (doar pentru Plus)
+            <input name="aviz_number" placeholder="AVZ-001; la Minus se genereaza automat">
         </label>
 
         <label>
@@ -80,7 +80,7 @@ $today = (string) ($data['today'] ?? date('Y-m-d'));
                     <th>Data receptie</th>
                     <th>Tip</th>
                     <th>Aviz</th>
-                    <th>NIR</th>
+                    <th>Document generat</th>
                     <th>Cantitate</th>
                     <th>Gestiune</th>
                     <th>User</th>
@@ -95,9 +95,10 @@ $today = (string) ($data['today'] ?? date('Y-m-d'));
                         <td><span class="status"><?= h($adjustment['adjustment_type'] === 'plus' ? 'Plus' : 'Minus') ?></span></td>
                         <td><strong><?= h($adjustment['aviz_number']) ?></strong></td>
                         <td>
-                            <?php if (!empty($adjustment['nir_document_id'])): ?>
-                                <a class="table-link" href="index.php?page=document_mock&amp;document_id=<?= h((string) $adjustment['nir_document_id']) ?>" target="_blank" rel="noopener">
-                                    <?= h($adjustment['nir_series'] . '-' . str_pad((string) max(1, (int) $adjustment['nir_number']), 4, '0', STR_PAD_LEFT)) ?>
+                            <?php if (!empty($adjustment['document_id'])): ?>
+                                <?php $padding = $adjustment['document_type'] === 'AVIZ-RETUR' ? 3 : 4; ?>
+                                <a class="table-link" href="index.php?page=document_mock&amp;document_id=<?= h((string) $adjustment['document_id']) ?>" target="_blank" rel="noopener">
+                                    <?= h($adjustment['document_series'] . '-' . str_pad((string) max(1, (int) $adjustment['document_number']), $padding, '0', STR_PAD_LEFT)) ?>
                                 </a>
                             <?php else: ?>
                                 <span class="muted">-</span>

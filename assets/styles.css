@@ -926,6 +926,62 @@ th {
   min-width: 150px;
 }
 
+.report-register {
+  margin-top: 24px;
+}
+
+.report-register-heading {
+  align-items: flex-start;
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+}
+
+.report-register-heading p {
+  margin: 4px 0 0;
+}
+
+.report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.report-register th small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.report-register-totals {
+  margin: 20px 0;
+}
+
+.numeric {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.pagination {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-top: 16px;
+}
+
+.pagination .disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.table-summary {
+  color: var(--muted);
+  margin: 12px 0 0;
+  text-align: right;
+}
+
 .register-balance-summary {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1081,5 +1137,19 @@ th {
 
   .panel-heading-row {
     flex-direction: column;
+  }
+
+  .report-register-heading,
+  .pagination {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .report-actions {
+    justify-content: stretch;
+  }
+
+  .pagination span {
+    text-align: center;
   }
 }

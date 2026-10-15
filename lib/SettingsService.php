@@ -457,7 +457,7 @@ final class SettingsService
 
     private function internalDocumentSeriesTypes(): array
     {
-        return ['PV-CUST', 'PV-FAG', 'PV-RET', 'AVIZ', 'NIR', 'BON', 'BORD'];
+        return ['PV-CUST', 'PV-FAG', 'PV-RET', 'AVIZ', 'AVIZ-RETUR', 'NIR', 'BON', 'BORD'];
     }
 
     private function normalizeUserStoreId(mixed $rawStoreId): int

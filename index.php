@@ -106,15 +106,17 @@ if ($page === 'document_mock') {
 
     $pdf = $app->documentPdfById((int) $doc['id']);
     if ($pdf !== null) {
+        $numberWidth = strtoupper((string) ($doc['document_type'] ?? '')) === 'AVIZ-RETUR' ? 3 : 4;
         header('Content-Type: application/pdf');
-        header('Content-Disposition: inline; filename="' . preg_replace('/[^A-Za-z0-9._-]+/', '_', trim($doc['series'] . '-' . str_pad((string) max(1, (int) $doc['number']), 4, '0', STR_PAD_LEFT))) . '.pdf"');
+        header('Content-Disposition: inline; filename="' . preg_replace('/[^A-Za-z0-9._-]+/', '_', trim($doc['series'] . '-' . str_pad((string) max(1, (int) $doc['number']), $numberWidth, '0', STR_PAD_LEFT))) . '.pdf"');
         echo $pdf;
         exit;
     }
 
     header('Content-Type: text/plain; charset=utf-8');
     echo "Mock document PDF\n";
-    echo $doc['series'] . '-' . str_pad((string) max(1, (int) $doc['number']), 4, '0', STR_PAD_LEFT) . "\n";
+    $numberWidth = strtoupper((string) ($doc['document_type'] ?? '')) === 'AVIZ-RETUR' ? 3 : 4;
+    echo $doc['series'] . '-' . str_pad((string) max(1, (int) $doc['number']), $numberWidth, '0', STR_PAD_LEFT) . "\n";
     echo 'Status: ' . $doc['status'] . "\n";
     echo 'Generarea PDF va fi definita ulterior.';
     exit;
@@ -154,6 +156,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } catch (Throwable $error) {
         (new \Ceara\Http\PostActionDispatcher())->handleError($error, $page);
     }
+}
+
+if ($page === 'processing_fee_register_pdf') {
+    require_login();
+    $dateStart = (string) ($_GET['date_start'] ?? '');
+    $dateEnd = (string) ($_GET['date_end'] ?? '');
+    $pdf = $app->processingFeeReceiptsPdf(current_user()['id'], $dateStart, $dateEnd);
+    $safeStart = preg_replace('/[^0-9-]+/', '', $dateStart) ?: date('Y-m-01');
+    $safeEnd = preg_replace('/[^0-9-]+/', '', $dateEnd) ?: date('Y-m-d');
+
+    header('Content-Type: application/pdf');
+    header('Content-Disposition: attachment; filename="registru-incasari-' . $safeStart . '-' . $safeEnd . '.pdf"');
+    header('Content-Length: ' . strlen($pdf));
+    echo $pdf;
+    exit;
 }
 
 if ($page === 'login') {
@@ -213,7 +230,18 @@ try {
         ),
         'purchase_exit' => $app->purchaseExitData(current_user()['id']),
         'documents' => ['documents' => $app->documents()],
-        'reports' => ['dashboard' => $app->dashboard(current_user()['id']), 'processing' => $app->processingLots(current_user()['id']), 'purchases' => $app->purchaseLots(current_user()['id'])],
+        'reports' => [
+            'dashboard' => $app->dashboard(current_user()['id']),
+            'processing' => $app->processingLots(current_user()['id']),
+            'purchases' => $app->purchaseLots(current_user()['id']),
+            'processing_fee_receipts' => $app->processingFeeReceiptsReport(
+                current_user()['id'],
+                (string) ($_GET['date_start'] ?? ''),
+                (string) ($_GET['date_end'] ?? ''),
+                (string) ($_GET['period'] ?? ''),
+                (int) ($_GET['register_page'] ?? 1)
+            ),
+        ],
         'settings' => $app->settings(),
         'audit' => ['entries' => $app->audit()],
     };

@@ -75,19 +75,13 @@ Build production zip only when explicitly requested:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-production-zip.ps1
 ```
 
-Current production-ready full package:
+Older packages in `deploy/output/` are historical and must not be used for the next release. Build a new package only after validating the candidate on STAGE.
 
-- `deploy/output/ceara-production-20260624-143740.zip`
-
-Current production patch package for the `external_checked_at` fix:
-
-- `deploy/output/ceara-production-patch-1.2.011-20260624.zip`
-
-Production reset SQL:
+Local reset SQL (excluded from production packages):
 
 - `deploy/sql/init-production.sql`
 
-Seeded reset login:
+Seeded login after a local reset:
 
 - user: `admin`
 - password: `CearaAdmin!2026`

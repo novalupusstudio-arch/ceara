@@ -114,6 +114,9 @@ final class PostActionDispatcher
                 'processor_id' => \post_int('processor_id'),
                 'aviz_number' => \post_string('aviz_number'),
                 'aviz_date' => \post_string('aviz_date'),
+                'processor_invoice_number' => \post_string('processor_invoice_number'),
+                'processing_cost' => \post_string('processing_cost'),
+                'foundation_kg' => \post_string('foundation_kg'),
                 'lot_qty' => $_POST['lot_qty'] ?? [],
                 'reject_qty' => $_POST['reject_qty'] ?? [],
             ], $user['id']);

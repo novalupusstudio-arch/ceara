@@ -1,0 +1,88 @@
+<style>
+  @page { margin: 18mm 14mm 16mm; }
+  body { color: #111; font-family: DejaVu Sans, sans-serif; font-size: 11px; line-height: 1.35; }
+  table { border-collapse: collapse; width: 100%; }
+  .header td { vertical-align: top; }
+  .company { font-size: 14px; font-weight: bold; text-transform: uppercase; }
+  .doc-box { border: 1px solid #111; padding: 8px; text-align: center; }
+  h1 { font-size: 17px; margin: 22px 0 4px; text-align: center; }
+  .subtitle { margin-bottom: 18px; text-align: center; }
+  .info td, .items th, .items td { border: 1px solid #111; padding: 7px; }
+  .label, .items th { background: #f0f0f0; font-weight: bold; }
+  .label { width: 18%; }
+  .items { margin-top: 16px; }
+  .right { text-align: right; }
+  .notes { border: 1px solid #111; margin-top: 14px; min-height: 55px; padding: 8px; }
+  .signatures { margin-top: 42px; }
+  .signatures td { text-align: center; vertical-align: top; width: 50%; }
+  .line { border-top: 1px solid #111; display: inline-block; margin-top: 40px; padding-top: 4px; width: 70%; }
+</style>
+
+<table class="header">
+  <tr>
+    <td style="width:68%;">
+      <div class="company">[company_name]</div>
+      CUI: [company_vat_number]<br>
+      Nr. Reg. Com.: [company_registry_number]<br>
+      [company_address]<br>
+      Gestiune: [store_name] - [store_address]
+    </td>
+    <td style="width:32%;">
+      <div class="doc-box">
+        <strong>AVIZ DE RETUR</strong><br>
+        Nr. [document_number]<br>
+        Data: [document_date]
+      </div>
+    </td>
+  </tr>
+</table>
+
+<h1>AVIZ DE RETUR FAGURI DIN CEARA</h1>
+<div class="subtitle">Retur din bufferul operational catre fabrica</div>
+
+<table class="info">
+  <tr>
+    <td class="label">Expeditor</td>
+    <td>[company_name] - [store_name]</td>
+  </tr>
+  <tr>
+    <td class="label">Adresa expeditor</td>
+    <td>[store_address]</td>
+  </tr>
+  <tr>
+    <td class="label">Destinatar</td>
+    <td>[processor_name] / CUI [processor_identifier]</td>
+  </tr>
+  <tr>
+    <td class="label">Adresa destinatar</td>
+    <td>[processor_address]</td>
+  </tr>
+</table>
+
+<table class="items">
+  <thead>
+    <tr>
+      <th style="width:10%;">Nr.</th>
+      <th>Produs</th>
+      <th style="width:12%;">UM</th>
+      <th style="width:24%;">Cantitate</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="text-align:center;">1</td>
+      <td>Faguri din ceara returnati</td>
+      <td style="text-align:center;">kg</td>
+      <td class="right">[foundation_qty_kg]</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="notes"><strong>Observatii:</strong><br>[notes]</div>
+
+<table class="signatures">
+  <tr>
+    <td><strong>Predat de</strong><br>[operator_name]<br><span class="line">Semnatura</span></td>
+    <td><strong>Primit de</strong><br>[processor_name]<br><span class="line">Semnatura</span></td>
+  </tr>
+</table>

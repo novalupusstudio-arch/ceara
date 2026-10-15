@@ -12,9 +12,9 @@ final class InventoryService
     {
     }
 
-    public function record(string $type, int $qty, int $storeId, string $refType, int $refId, string $notes): void
+    public function record(string $type, int $qty, int $storeId, string $refType, int $refId, string $notes, ?string $createdAt = null): void
     {
-        $this->writer()->record($type, $qty, $storeId, $refType, $refId, $notes);
+        $this->writer()->record($type, $qty, $storeId, $refType, $refId, $notes, $createdAt);
     }
 
     public function sum(string $type): int

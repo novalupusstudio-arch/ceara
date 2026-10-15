@@ -39,6 +39,7 @@ $excludeDirs = @(
 $excludeFiles = @(
     ".env",
     "config\local.php",
+    "deploy\sql\init-production.sql",
 
     "config\secrets.php",
     "config\xampp-target.local.txt",

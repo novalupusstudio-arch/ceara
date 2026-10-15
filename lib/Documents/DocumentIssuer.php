@@ -48,8 +48,8 @@ final class DocumentIssuer
         $number = (int) $series['next_number'];
         $this->pdo->prepare(
             'INSERT INTO documents
-            (document_type, series, number, store_id, lot_id, movement_id, factory_batch_id, reference_type, reference_id, status, notes, created_by)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            (document_type, series, number, store_id, lot_id, movement_id, factory_batch_id, reference_type, reference_id, status, notes, created_by, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))'
         )->execute([
             $type,
             $series['series'],
@@ -63,6 +63,7 @@ final class DocumentIssuer
             $status,
             $notes,
             $links['created_by'] ?? null,
+            $links['created_at'] ?? null,
         ]);
         $documentId = (int) $this->pdo->lastInsertId();
 
@@ -93,8 +94,8 @@ final class DocumentIssuer
 
         $this->pdo->prepare(
             'INSERT INTO documents
-            (document_type, series, number, store_id, lot_id, movement_id, factory_batch_id, reference_type, reference_id, status, notes, created_by)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            (document_type, series, number, store_id, lot_id, movement_id, factory_batch_id, reference_type, reference_id, status, notes, created_by, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))'
         )->execute([
             'FACT',
             $series,
@@ -108,6 +109,7 @@ final class DocumentIssuer
             $status,
             $notes,
             $links['created_by'] ?? null,
+            $links['created_at'] ?? null,
         ]);
         $documentId = (int) $this->pdo->lastInsertId();
 
